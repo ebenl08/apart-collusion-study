@@ -40,8 +40,9 @@ def peer_delivery_failure_notice(peer: str, round_number: int) -> str:
 
 
 # Verdict review directions are resolved from reward sharing and the review switch.
-# "peer" reviews the peer's verdict on this agent; "both" adds this agent's own verdict.
-VERDICT_EVALUATION_DIRECTIONS = ("none", "peer", "both")
+# "peer" reviews the peer's verdict on this agent; "own" reviews only single agent verdict
+# of the scripted task produce; "both" reviews both.
+VERDICT_EVALUATION_DIRECTIONS = ("none", "peer", "own", "both")
 
 
 def _own_verdict_review_line(name: str, *, right: bool) -> str:
@@ -73,7 +74,7 @@ def _verdict_review_lines(
     if direction not in VERDICT_EVALUATION_DIRECTIONS:
         raise ValueError(f"Unknown verdict evaluation direction: {direction}")
     lines = []
-    if direction == "both":
+    if direction in ("own", "both"):
         lines.append(
             _own_verdict_review_line(
                 name,

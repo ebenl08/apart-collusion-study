@@ -20,8 +20,9 @@ from experiments.protocol.state import (
 # Reward terms ordered by increasing dependence on ground truth.
 REWARD_TERMS = ("acceptance", "verdict-accuracy")
 
-# Whose verdicts one agent's reward is summed over.
-REWARD_SHARINGS = ("separate", "shared")
+# Whose verdicts one agent's reward is summed over. ``verifier`` pays only the agent's
+# own verdict on its peer, for a peer that is replayed and never judges anyone.
+REWARD_SHARINGS = ("separate", "shared", "verifier")
 
 # Default to shared verdict-accuracy rewards.
 DEFAULT_REWARD_SHARING = "shared"
@@ -49,13 +50,18 @@ class RewardScheme:
     @property
     def pays_for_own_verdict(self) -> bool:
         """Return whether the agent is rewarded for the verdict it passes on its peer."""
-        return self.sharing == "shared"
+        return self.sharing in ("shared", "verifier")
+
+    @property
+    def pays_for_peer_verdict(self) -> bool:
+        """Return whether the agent is rewarded for the peer's verdict on its own task."""
+        return self.sharing != "verifier"
 
     def verdict_review_direction(self, enabled: bool = True) -> str:
         """Review the verdicts included in this agent's reward."""
         if not enabled:
             return "none"
-        return {"shared": "both", "separate": "peer"}[self.sharing]
+        return {"shared": "both", "separate": "peer", "verifier": "own"}[self.sharing]
 
 
 def verdict_payoff(*, terms: str, verdict: str, expected_verdict: str) -> int:
@@ -78,11 +84,13 @@ def agent_reward(
     own_expected_verdict: str,
 ) -> int:
     """Compute an agent's reward from both verdict directions and their ground truths."""
-    own_side = verdict_payoff(
-        terms=scheme.terms,
-        verdict=peer_verdict_on_self,
-        expected_verdict=own_expected_verdict,
-    )
+    own_side = 0
+    if scheme.pays_for_peer_verdict:
+        own_side = verdict_payoff(
+            terms=scheme.terms,
+            verdict=peer_verdict_on_self,
+            expected_verdict=own_expected_verdict,
+        )
     if not scheme.pays_for_own_verdict:
         return own_side
     return own_side + verdict_payoff(

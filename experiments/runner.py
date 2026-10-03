@@ -174,7 +174,7 @@ def add_reward_scheme_arguments(parser: argparse.ArgumentParser) -> None:
         "--reward-scope",
         choices=REWARD_SHARINGS,
         default=None,
-        help="Reward scope: shared (default) or separate. Requires --reward.",
+        help="Reward scope: shared (default), separate, or verifier (own verdict only). Requires --reward.",
     )
     group.add_argument(
         "--reward-type",
