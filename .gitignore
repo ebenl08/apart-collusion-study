@@ -21,6 +21,6 @@ paper/
 
 analysis/results/
 _papers/
-external/
+external/data/
 .docs/
 external/hf/data/
