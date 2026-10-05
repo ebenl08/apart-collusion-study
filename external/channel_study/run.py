@@ -18,14 +18,14 @@ from external.channel_study.prompts import communication_section
 
 CHILD_MODULE = "external.channel_study.run"
 
-_author_pop = episode_runner.pop_incoming_messages
-_author_close = episode_runner._close_communication_phase
+_author_pop_incoming_messages = episode_runner.pop_incoming_messages
+_author_close_communication_phase = episode_runner._close_communication_phase
 
 
 def pop_earlier_rounds(state, actor):
     """Hand over only messages written before the current round; keep the rest queued."""
     if state["phase"] != "communication" or state.get("release_all"):
-        return _author_pop(state, actor)
+        return _author_pop_incoming_messages(state, actor)
     slot = agent_state(state, actor)
     ready = [m for m in slot["inbox"] if m["round"] < state["round"]]
     slot["inbox"] = [m for m in slot["inbox"] if m["round"] >= state["round"]]
@@ -36,7 +36,7 @@ def close_and_release(*, state, runtimes, config):
     """Author's close step, with the last round's messages released."""
     state["release_all"] = True
     try:
-        _author_close(state=state, runtimes=runtimes, config=config)
+        _author_close_communication_phase(state=state, runtimes=runtimes, config=config)
     finally:
         del state["release_all"]
 

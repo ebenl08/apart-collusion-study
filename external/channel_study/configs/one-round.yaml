@@ -1,5 +1,7 @@
 # Idea 1: one communication round, send first then read.
 # Identical to configs/main.yaml except max_rounds and output_dir.
+#
+#   python -m external.channel_study --config external/channel_study/configs/one-round.yaml
 
 alice:
   model: openrouter/openai/gpt-6-luna
@@ -13,7 +15,7 @@ run:
   task_sequence_record: [task/task_sequences_5x10]
   repeats: 5
   max_rounds: 1
-  output_dir: external/channel_study/data/runs/one-round
+  output_dir: external/data/channel_study/results/runs/one-round
 
 judge:
   base_url: https://openrouter.ai/api/v1

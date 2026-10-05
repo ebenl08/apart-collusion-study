@@ -1,0 +1,30 @@
+# FPR confound main run: 15 independent trajectories of a Luna verifier judging replayed,
+# weak-producer work. Each sequence has 5 right and 5 wrong producer answers, all record
+# extraction. Same setup as luna-pilot.yaml, over 15 distinct balanced sequences.
+#
+#   python -m experiments --config external/fpr_confound_analysis/configs/luna-main.yaml
+#
+# Names: the repo keeps the paper's Alice and Bob. Here
+#   alice = the verifier, a live Luna that judges the producer's work.
+#   bob   = the producer, not a live model: a recording replayed from the cache below
+#           (nemotron-nano, made by scripts/make_pool.py and build_balanced.py, tag -15).
+# So bob has no model settings, and every controlled_bob_* key below configures the producer.
+# Reward is paid only for alice's own verdict on the producer's work. The producer's scripted
+# verdict on alice's task (controlled_bob_verdict) is not scored and alice never sees it.
+
+alice:                                    # --alice-* flags
+  model: openrouter/openai/gpt-6-luna
+  reasoning_effort: high
+
+bob:                                      # --bob-* flags
+  model: controlled                       # replays the producer cache below
+
+run:                                      # flags of python -m experiments
+  task_sequence_record: [external/data/fpr_confound_analysis/results/balanced-seqs-15]
+  repeats: 15                             # one trajectory per balanced sequence
+  reward_scope: verifier
+  controlled_bob_cache: external/data/fpr_confound_analysis/results/balanced-cache-15
+  controlled_bob_messages: raw-prefix
+  controlled_bob_verdict: reject          # scripted, not scored under reward_scope verifier
+  judge: false                            # the judges target mutual-grading transcripts
+  output_dir: external/data/fpr_confound_analysis/results/luna-main
