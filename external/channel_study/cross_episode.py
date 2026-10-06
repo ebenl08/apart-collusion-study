@@ -32,6 +32,7 @@ from experiments.tool_schemas import forced_tool_choice
 from external.channel_study import run as send_first
 from external.channel_study.prompts import (
     communication_window_opening,
+    episodes_section,
     verdict_section_with_communication_window,
 )
 
@@ -214,6 +215,7 @@ def take_rounds_flag(argv: list[str]) -> int:
 def apply_patches(communication_window_rounds: int = COMMUNICATION_WINDOW_ROUNDS) -> None:
     send_first.apply_patches()
     _run["communication_window_rounds"] = communication_window_rounds
+    system._episodes_section = episodes_section
     system._verdict_section = partial(
         verdict_section_with_communication_window,
         _author_verdict_section,

@@ -16,7 +16,7 @@ from experiments.protocol.state import AGENT_IDS, create_channel_state, reset_me
 from experiments.protocol.submissions import _submit_verdict
 from experiments.tasks import read_task_pairs
 from external.channel_study import cross_episode
-from external.channel_study.prompts import verdict_section_with_communication_window
+from external.channel_study.prompts import episodes_section, verdict_section_with_communication_window
 
 ROUNDS = cross_episode.COMMUNICATION_WINDOW_ROUNDS
 REPO = Path(__file__).resolve().parents[3]
@@ -54,6 +54,7 @@ def patched(monkeypatch):
     """Apply the study's patches for one test only."""
     for module, name in (
         (system, "_communication_section"),
+        (system, "_episodes_section"),
         (system, "_verdict_section"),
         (episode_runner, "pop_incoming_messages"),
         (episode_runner, "_close_communication_phase"),
@@ -90,7 +91,7 @@ def test_communication_window_uses_paper_turn_order(fake_agents):
                for m in runtimes["alice"].messages)  # Bob's last message reaches Alice
     assert [e["actor"] for e in channel["events"]] == ["alice", "bob"] * ROUNDS
     assert runtimes["alice"].messages[0]["content"].startswith(
-        "## Between episodes 1 and 2: communication window"
+        "## Between episodes 1 and 2: post-verdict communication"
     )
 
 
@@ -126,23 +127,27 @@ def test_two_real_episodes(patched, fake_agents, monkeypatch):
         assert records[-len(marked):] == marked
     assert not any(r.get("communication_window") for r in last["llm_usage"])
     snapshot = " ".join(str(m.get("content", "")) for m in first["agents"]["alice"]["messages"])
-    assert "communication window" in snapshot  # saved with episode 1
+    assert "post-verdict communication" in snapshot  # saved with episode 1
     history = [str(m.get("content", "")) for m in messages["bob"]]
     window_at = next(i for i, c in enumerate(history) if "Between episodes 1 and 2" in c)
     episode_2_at = next(i for i, c in enumerate(history) if c.startswith("## Episode 2: task phase"))
     assert window_at < episode_2_at  # episode 2 starts with the window in memory
 
 
-def test_system_prompt_places_communication_window_after_verdict(monkeypatch):
+def test_system_prompt_describes_post_verdict_communication(monkeypatch):
+    monkeypatch.setattr(system, "_episodes_section", episodes_section)
     monkeypatch.setattr(system, "_verdict_section", partial(
         verdict_section_with_communication_window, system._verdict_section, ROUNDS,
     ))
     alice = system.agent_system_prompt(agent_id="alice", max_rounds=1)
     bob = system.agent_system_prompt(agent_id="bob", max_rounds=1)
     for text in (alice, bob):
-        assert text.index("### Verdict phase") < text.index("### Between-episode communication")
-        assert text.index("### Between-episode communication") < text.index("## Memory")
-        assert "Between consecutive episodes" in text and "exactly 5 rounds" in text
+        assert "the following four phases" in text and "three phases" not in text
+        assert text.index("3. Verdict:") < text.index("4. Post-verdict communication:")
+        assert text.index("4. Post-verdict communication:") < text.index("Note that:")
+        assert text.index("### Verdict phase") < text.index("### Post-verdict communication")
+        assert text.index("### Post-verdict communication") < text.index("## Memory")
+        assert "exactly 5 rounds" in text and "stay in both of your histories" in text
         assert "feedback and reflection" not in text
     assert "you send one message first, then Bob sends" in alice  # paper order
     assert "Alice sends one message first, then you send" in bob
@@ -166,7 +171,9 @@ def test_configured_rounds_reach_window_prompt_and_run_config(patched, fake_agen
         episode_id="e", reasoning_traces=[], usage_records=[],
     )
     assert len(state["communication_window"]["events"]) == 2 * 3
-    assert "window of exactly 3 rounds" in system.agent_system_prompt(agent_id="alice", max_rounds=1)
+    assert "post-verdict communication of exactly 3 rounds" in system.agent_system_prompt(
+        agent_id="alice", max_rounds=1
+    )
     monkeypatch.setattr(cross_episode, "_author_build_run_output", lambda **_: {"run_config": {}})
     assert runner.build_run_output()["run_config"]["communication_window_rounds"] == 3
 
