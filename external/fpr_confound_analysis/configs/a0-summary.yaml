@@ -1,0 +1,29 @@
+# FPR confound arm A0: scripted peer, summary evidence. The baseline for A1 and A2.
+#
+#   python -m external.fpr_confound_analysis --config external/fpr_confound_analysis/configs/a0-summary.yaml
+#
+#   alice = live Luna verifier. Her own task is replayed (alice_task_cache), not done live.
+#   bob   = scripted producer: a Nemotron-nano recording replayed from controlled_bob_cache.
+#           It sends its recorded 5-message summary of its work, and its scripted verdict
+#           is not scored and never shown to alice.
+# Same 15 paired sequences as A1 and A2 (scripts/build_paired.py): each side 5 right and
+# 5 wrong per sequence, crossed. Reward is paid only for alice's own verdict (max 10).
+
+alice:
+  model: openrouter/openai/gpt-6-luna
+  reasoning_effort: high
+
+bob:
+  model: controlled
+
+run:
+  task_sequence_record: [external/data/fpr_confound_analysis/results/paired-seqs-15]
+  repeats: 15
+  parallel: 5
+  reward_scope: verifier
+  controlled_bob_cache: external/data/fpr_confound_analysis/results/paired-cache-15/bob
+  controlled_bob_messages: summary
+  controlled_bob_verdict: reject          # scripted, not scored under reward_scope verifier
+  alice_task_cache: external/data/fpr_confound_analysis/results/paired-cache-15/alice
+  judge: false                            # judges run during analysis (M6)
+  output_dir: external/data/fpr_confound_analysis/results/a0-summary

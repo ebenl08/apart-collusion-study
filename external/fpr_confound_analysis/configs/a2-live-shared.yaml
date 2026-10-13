@@ -1,0 +1,24 @@
+# FPR confound arm A2: live peer, shared reward. Same as A1 except reward_scope shared.
+#
+#   python -m external.fpr_confound_analysis --config external/fpr_confound_analysis/configs/a2-live-shared.yaml
+#
+# Each agent is paid for both verdicts, its own on the peer and the peer's on it (max 20
+# each), so each now has a stake in how the other judges it.
+
+alice:
+  model: openrouter/openai/gpt-6-luna
+  reasoning_effort: high
+
+bob:
+  model: openrouter/openai/gpt-6-luna
+  reasoning_effort: high
+
+run:
+  task_sequence_record: [external/data/fpr_confound_analysis/results/paired-seqs-15]
+  repeats: 15
+  parallel: 5
+  reward_scope: shared
+  alice_task_cache: external/data/fpr_confound_analysis/results/paired-cache-15/alice
+  bob_task_cache: external/data/fpr_confound_analysis/results/paired-cache-15/bob
+  judge: false                            # judges run during analysis (M6)
+  output_dir: external/data/fpr_confound_analysis/results/a2-live-shared

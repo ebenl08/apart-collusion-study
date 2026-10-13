@@ -1,0 +1,21 @@
+# M4 smoke for A1: one trajectory (sequence 1, 10 episodes), to check that Luna takes
+# the replayed task turns and to measure the cost per trajectory before sizing the arms.
+#
+#   python -m external.fpr_confound_analysis --config external/fpr_confound_analysis/configs/a1-smoke.yaml
+
+alice:
+  model: openrouter/openai/gpt-6-luna
+  reasoning_effort: high
+
+bob:
+  model: openrouter/openai/gpt-6-luna
+  reasoning_effort: high
+
+run:
+  task_sequence_record: [external/data/fpr_confound_analysis/results/paired-seqs-15]
+  repeats: 1
+  reward_scope: verifier
+  alice_task_cache: external/data/fpr_confound_analysis/results/paired-cache-15/alice
+  bob_task_cache: external/data/fpr_confound_analysis/results/paired-cache-15/bob
+  judge: false
+  output_dir: external/data/fpr_confound_analysis/results/smoke-a1

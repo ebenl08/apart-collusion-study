@@ -45,18 +45,30 @@ RUN_STAMP_RE = re.compile(
 )
 
 
+# Launch id the frontend sends for the summary across all of a model's launches.
+ALL_LAUNCHES = "__all__"
+
+
 def is_run_dir(path: Path) -> bool:
     return path.is_dir() and (path / "run.json").is_file()
 
 
 def find_runs(model_dir: Path) -> list[Path]:
-    """Runs sit at ``<launch>/rep<N>``; older ones sit directly in the model directory."""
+    """Runs sit at ``<launch>/rep<N>``; older ones sit directly in the model directory.
+
+    When ``model_dir`` is a condition folder (``<condition>/<model>/<launch>/rep<N>``),
+    the model folder adds one more level, so look up to three levels down.
+    """
     runs = []
     for child in sorted(p for p in model_dir.iterdir() if p.is_dir()):
         if is_run_dir(child):
             runs.append(child)
-        else:
-            runs.extend(d for d in sorted(child.iterdir()) if is_run_dir(d))
+            continue
+        for grandchild in sorted(p for p in child.iterdir() if p.is_dir()):
+            if is_run_dir(grandchild):
+                runs.append(grandchild)
+            else:
+                runs.extend(d for d in sorted(p for p in grandchild.iterdir() if p.is_dir()) if is_run_dir(d))
     return runs
 
 
@@ -355,9 +367,13 @@ def launch_reps(launch_dir: Path) -> list[Path]:
     return sorted((d for d in launch_dir.iterdir() if is_run_dir(d)), key=lambda d: rep_order(d.name))
 
 
-def launch_summary(launch_dir: Path) -> dict:
-    """EC, TC and CC over a launch's reps, plus the first rep's config for the header."""
-    runs = [(d, json.loads((d / "run.json").read_text(encoding="utf-8"))) for d in launch_reps(launch_dir)]
+def launch_summary(launch_dir: Path, reps: list[Path] | None = None) -> dict:
+    """EC, TC and CC over a launch's reps, plus the first rep's config for the header.
+
+    ``reps`` overrides the launch's own reps, so one summary can span several launches.
+    """
+    runs = [(d, json.loads((d / "run.json").read_text(encoding="utf-8")))
+            for d in (reps if reps is not None else launch_reps(launch_dir))]
     rates = collusion_rates([(d.name, run) for d, run in runs])
     rates["run_config"] = runs[0][1].get("run_config") or {} if runs else {}
     return rates
@@ -528,7 +544,7 @@ class ViewerHandler(BaseHTTPRequestHandler):
         """Resolve a launch directory (or a standalone run) inside one model directory."""
         model_dir = (self.results_root.resolve() / model).resolve()
         candidate = (model_dir / launch).resolve()
-        if candidate.parent != model_dir or not candidate.is_dir() or not launch_reps(candidate):
+        if model_dir not in candidate.parents or not candidate.is_dir() or not launch_reps(candidate):
             raise FileNotFoundError(f"{model}/{launch}")
         return candidate
 
@@ -546,6 +562,13 @@ class ViewerHandler(BaseHTTPRequestHandler):
                 self._send_json(build_tree(self.results_root))
                 return
             if len(parts) == 4 and parts[1] == "launch":
+                if parts[3] == ALL_LAUNCHES:
+                    # Every rep of every launch under this model, as one summary.
+                    model_dir = (self.results_root.resolve() / parts[2]).resolve()
+                    if self.results_root.resolve() not in model_dir.parents or not model_dir.is_dir():
+                        raise FileNotFoundError(parts[2])
+                    self._send_json(launch_summary(model_dir, reps=sorted(find_runs(model_dir), key=lambda d: (d.parent.name, rep_order(d.name)))))
+                    return
                 self._send_json(launch_summary(self._resolve_launch(parts[2], parts[3])))
                 return
             if len(parts) == 5 and parts[1] == "run":
@@ -786,6 +809,7 @@ const SECTIONS = [
   ["overview", "Overview"],
   ["metrics", "Metrics"],
   ["episodes", "Episodes"],
+  ["reflections", "Reflections"],
   ["agreement.csv", "agreement.csv"],
   ["relaxation.csv", "relaxation.csv"],
   ["raw", "run.json"],
@@ -929,7 +953,17 @@ function renderModelTabs() {
 
 function currentModel() { return state.tree.models.find((m) => m.name === state.model); }
 function currentRun() { const m = currentModel(); return m && m.runs.find((r) => r.dir === state.run); }
-function currentLaunch() { const m = currentModel(); return m && m.launches.find((l) => l.dir === state.launch); }
+const ALL_LAUNCHES = "__all__";
+/* A model with several launches also gets a synthetic "all launches" entry whose reps are theirs combined. */
+function allLaunches(model) {
+  return { dir: ALL_LAUNCHES, label: "All launches", stamp: "All launches", hash: "", runs: model.runs.map((r) => r.dir) };
+}
+function currentLaunch() {
+  const m = currentModel();
+  if (!m) return undefined;
+  if (state.launch === ALL_LAUNCHES && m.launches.length > 1) return allLaunches(m);
+  return m.launches.find((l) => l.dir === state.launch);
+}
 
 /* One tab per experiment launch; its reps sit on the row below, after a summary tab. */
 function renderLaunchTabs() {
@@ -937,7 +971,8 @@ function renderLaunchTabs() {
   bar.textContent = "";
   const model = currentModel();
   if (!model) return;
-  for (const launch of model.launches) {
+  const entries = model.launches.length > 1 ? [allLaunches(model), ...model.launches] : model.launches;
+  for (const launch of entries) {
     bar.append(el("button", {
       class: "tab", role: "tab", "aria-selected": String(launch.dir === state.launch), title: launch.dir,
       onclick: () => selectLaunch(launch.dir),
@@ -1109,8 +1144,33 @@ function renderView() {
   if (state.section === "overview") view.append(renderOverview());
   else if (state.section === "metrics") view.append(renderMetrics());
   else if (state.section === "episodes") view.append(renderEpisodes());
+  else if (state.section === "reflections") view.append(renderReflections());
   else if (state.section === "raw") view.append(renderRaw());
   else view.append(renderCsv(state.section));
+}
+
+function renderReflections() {
+  const frag = document.createDocumentFragment();
+  const episodes = state.data.runJson.results || [];
+  if (!episodes.length) return el("p", { class: "note", text: "No episodes in this run." });
+  for (const ep of episodes) {
+    const agents = ep.agents || {};
+    const head = el("h3", {}, "Episode " + ep.episode_index, el("code", { text: ep.episode_id }));
+    for (const name of Object.keys(agents)) {
+      const a = agents[name];
+      head.append(badge(name + ": " + a.verdict + (a.verdict_correct ? " ✓" : " ✗") + " · reward " + a.reward, a.verdict_correct ? "pos" : "neg"));
+    }
+    const grid = el("div", { class: "grid" });
+    for (const name of Object.keys(agents)) {
+      const a = agents[name];
+      const card = el("div", { class: "card" }, el("h3", { text: name }));
+      card.append(el("b", { text: "feedback received" }), el("pre", { text: a.outcome_feedback || "(none)" }));
+      card.append(el("b", { text: "reflection" }), el("pre", { text: a.reflection || "(none)" }));
+      grid.append(card);
+    }
+    frag.append(el("div", { class: "card" }, head, grid));
+  }
+  return frag;
 }
 
 function csvIndexByEpisode(name, valueColumn) {
@@ -1701,7 +1761,8 @@ async function boot() {
   state.model = models.some((m) => m.name === wanted.model) ? wanted.model : (models[0] && models[0].name) || null;
   const model = currentModel();
   const launches = model ? model.launches : [];
-  state.launch = launches.some((l) => l.dir === wanted.launch) ? wanted.launch : (launches[0] && launches[0].dir) || null;
+  const allOk = wanted.launch === ALL_LAUNCHES && launches.length > 1;
+  state.launch = allOk || launches.some((l) => l.dir === wanted.launch) ? wanted.launch : (launches[0] && launches[0].dir) || null;
   const launch = currentLaunch();
   state.run = launch && launch.runs.includes(wanted.run) ? wanted.run : null;
   if (SECTIONS.some(([id]) => id === wanted.section)) state.section = wanted.section;
