@@ -9,6 +9,14 @@ is shared and never mentions the peer in connection with it. The surface is chos
     record  write_note and read_notes on one append-only JSONL record; both results
             carry every note the caller can see
 
+Two options on the record surface, from ``run.read_notes_first`` and
+``run.allow_reflection_notes`` in the config:
+
+    --read-notes-first         the task phase starts with a step telling the agent to
+                               call read_notes
+    --allow-reflection-notes   the reflection prompt says the reflection is saved in the
+                               workspace, and the runner appends each one to the record
+
 Nothing in the author's files is edited. Patches, on top of simultaneous.py's:
 
   * ``tool_schemas.TASK_TOOL_NAMES`` and ``_tool_schemas_by_name``: the surface's tools,
@@ -35,14 +43,18 @@ from external.workspace_study.workspace import Record, Workspace
 
 CHILD_MODULE = "external.workspace_study.run"
 WORKSPACE_FLAG = "--workspace"
+READ_FIRST_FLAG = "--read-notes-first"
+REFLECTION_NOTES_FLAG = "--allow-reflection-notes"
 
 _author_tool_schemas_by_name = tool_schemas._tool_schemas_by_name
 _author_build_result = episode_runner.build_episode_result
 _author_create_output_path = runner._create_output_path
+_author_outcomes = episode_runner._process_episode_outcomes
+_author_build_run_output = runner.build_run_output
 
-# Set once per run: the surface (apply_patches) and its store
+# Set once per run: the surface and options (apply_patches) and the store
 # (create_output_path_and_workspace).
-_run = {"surface": None, "workspace": None}
+_run = {"surface": None, "workspace": None, "options": {}}
 
 
 def _function_schema(name, description, properties):
@@ -169,18 +181,53 @@ def create_output_path_and_workspace(args, repo_root):
     return output_path
 
 
-def take_workspace_flag(argv: list[str]) -> str:
-    """Read and remove --workspace, which the author's parser doesn't know."""
+def outcomes_then_save_reflections(**kwargs):
+    """Author's feedback and reflection, then each reflection appended to the record."""
+    outcomes = _author_outcomes(**kwargs)
+    for agent_id, outcome in outcomes.agents.items():
+        if outcome.reflection:
+            _run["workspace"].add_reflection(agent_id, outcome.reflection)
+    return outcomes
+
+
+def build_run_output_with_workspace(**kwargs):
+    """Author's run record, plus the workspace surface and options in run_config."""
+    record = _author_build_run_output(**kwargs)
+    record["run_config"]["workspace"] = _run["options"]
+    return record
+
+
+def take_workspace_flags(argv: list[str]) -> dict:
+    """Read and remove the workspace flags, which the author's parser doesn't know."""
     pre = argparse.ArgumentParser(add_help=False)
     pre.add_argument(WORKSPACE_FLAG, choices=sorted(SURFACES), required=True)
+    pre.add_argument(READ_FIRST_FLAG, action="store_true")
+    pre.add_argument(REFLECTION_NOTES_FLAG, action="store_true")
     known, rest = pre.parse_known_args(argv)
     argv[:] = rest
-    return known.workspace
+    return {
+        "surface": known.workspace,
+        "read_notes_first": known.read_notes_first,
+        "allow_reflection_notes": known.allow_reflection_notes,
+    }
 
 
-def apply_patches(surface: str) -> None:
+def apply_patches(
+    surface: str, read_notes_first: bool = False, allow_reflection_notes: bool = False
+) -> None:
+    if surface != "record" and (read_notes_first or allow_reflection_notes):
+        raise ValueError("read_notes_first and allow_reflection_notes need the record surface.")
     simultaneous.apply_patches()
     _run["surface"] = SURFACES[surface]
+    _run["options"] = {
+        "surface": surface,
+        "read_notes_first": read_notes_first,
+        "allow_reflection_notes": allow_reflection_notes,
+    }
+    runner.build_run_output = build_run_output_with_workspace
+    if allow_reflection_notes:
+        episode_runner.agent_reflection_prompt = prompts.reflection_prompt_saved
+        episode_runner._process_episode_outcomes = outcomes_then_save_reflections
     tool_names = tuple(_run["surface"]["handlers"])
     for task_type, names in tool_schemas.TASK_TOOL_NAMES.items():
         cut = names.index("save_final_answer")
@@ -188,7 +235,11 @@ def apply_patches(surface: str) -> None:
     tool_schemas._tool_schemas_by_name = tool_schemas_with_workspace
     dispatch.TOOL_HANDLERS.update(_run["surface"]["handlers"])
     system._episodes_section = prompts.episodes_section
-    system._task_section = _run["surface"]["task_section"]
+    system._task_section = (
+        prompts.task_section_record_read_first
+        if read_notes_first
+        else _run["surface"]["task_section"]
+    )
     simultaneous.on_step_start = begin_workspace_step
     episode_runner.build_episode_result = build_result_with_workspace
     runner._create_output_path = create_output_path_and_workspace
@@ -197,5 +248,5 @@ def apply_patches(surface: str) -> None:
 if __name__ == "__main__":
     import sys
 
-    apply_patches(take_workspace_flag(sys.argv))
+    apply_patches(**take_workspace_flags(sys.argv))
     runner.main()

@@ -38,8 +38,12 @@ def test_a_steps_notes_reach_the_other_agent_only_next_step(tmp_path):
     record = Record(tmp_path)
     record.begin_step(episode=0, step=0)
     # Bob writes first in wall-clock time; the shown order does not depend on that.
-    assert record.write("bob", "b0")["notes"] == [{"episode": 1, "agent": 1, "content": "b0"}]
-    assert record.write("alice", "a0")["notes"] == [{"episode": 1, "agent": 0, "content": "a0"}]
+    assert record.write("bob", "b0")["notes"] == [
+        {"episode": 1, "agent": 1, "type": "note", "content": "b0"}
+    ]
+    assert record.write("alice", "a0")["notes"] == [
+        {"episode": 1, "agent": 0, "type": "note", "content": "a0"}
+    ]
 
     record.begin_step(episode=0, step=1)
     assert [n["content"] for n in record.write("alice", "a1")["notes"]] == ["a0", "b0", "a1"]
@@ -49,10 +53,32 @@ def test_a_steps_notes_reach_the_other_agent_only_next_step(tmp_path):
     assert [(n["episode"], n["agent"], n["content"]) for n in notes] == [
         (1, 0, "a0"), (1, 1, "b0"), (1, 0, "a1"), (2, 1, "b-ep2"),
     ]
-    assert set(notes[0]) == {"episode", "agent", "content"}  # no id or step shown
+    assert set(notes[0]) == {"episode", "agent", "type", "content"}  # no id or step shown
 
     last = json.loads((tmp_path / "journal.jsonl").read_text().splitlines()[-1])
     assert (last["actor"], last["file"], last["shown"]) == ("bob", 3, [1, 0, 2, 3])
+
+
+def test_reflections_follow_their_episodes_notes(tmp_path):
+    record = Record(tmp_path)
+    record.begin_step(episode=0, step=0)
+    record.write("alice", "a-note")
+    record.begin_step(episode=0, step=3)
+    record.add_reflection("alice", "a-reflection")  # saved before Bob's late note
+    record.write("bob", "b-note")
+    record.add_reflection("bob", "b-reflection")
+
+    record.begin_step(episode=1, step=0)
+    notes = record.read("bob")["notes"]
+    assert [(n["episode"], n["agent"], n["type"], n["content"]) for n in notes] == [
+        (1, 0, "note", "a-note"),
+        (1, 1, "note", "b-note"),
+        (1, 0, "reflection", "a-reflection"),
+        (1, 1, "reflection", "b-reflection"),
+    ]
+    journal = [json.loads(x) for x in (tmp_path / "journal.jsonl").read_text().splitlines()]
+    assert [row["op"] for row in journal] == ["write", "reflection", "write", "reflection", "read"]
+    assert len(record.contents()) == 4  # the read added no row
 
 
 def test_empty_note_is_refused(tmp_path):

@@ -958,6 +958,11 @@ const ALL_LAUNCHES = "__all__";
 function allLaunches(model) {
   return { dir: ALL_LAUNCHES, label: "All launches", stamp: "All launches", hash: "", runs: model.runs.map((r) => r.dir) };
 }
+/* The launch a model opens on: the combined view when there is one, else its only launch. */
+function defaultLaunch(model) {
+  if (!model || !model.launches.length) return null;
+  return model.launches.length > 1 ? ALL_LAUNCHES : model.launches[0].dir;
+}
 function currentLaunch() {
   const m = currentModel();
   if (!m) return undefined;
@@ -1046,7 +1051,7 @@ function renderRunHead() {
 async function selectModel(name) {
   state.model = name;
   const model = currentModel();
-  state.launch = model && model.launches.length ? model.launches[0].dir : null;
+  state.launch = defaultLaunch(model);
   state.run = null;
   renderModelTabs();
   renderLaunchTabs();
@@ -1762,7 +1767,7 @@ async function boot() {
   const model = currentModel();
   const launches = model ? model.launches : [];
   const allOk = wanted.launch === ALL_LAUNCHES && launches.length > 1;
-  state.launch = allOk || launches.some((l) => l.dir === wanted.launch) ? wanted.launch : (launches[0] && launches[0].dir) || null;
+  state.launch = allOk || launches.some((l) => l.dir === wanted.launch) ? wanted.launch : defaultLaunch(model);
   const launch = currentLaunch();
   state.run = launch && launch.runs.includes(wanted.run) ? wanted.run : null;
   if (SECTIONS.some(([id]) => id === wanted.section)) state.section = wanted.section;

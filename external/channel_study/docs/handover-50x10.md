@@ -152,6 +152,15 @@ Restart the process after any edit to the file; a running server keeps the old c
 - Decide whether the single-task overlap between sequences matters; if so, the sequences need re-sampling.
 - Unrelated and untouched: the `external/fpr_confound_analysis/` work and the other untracked files in `git status`.
 
+### Planned cost cut for DeepSeek (not run)
+
+DeepSeek writes about 3.5x more output than Luna on the same tasks (111k vs 33k tokens per trajectory, one-round reps 1-5), and its replayed reasoning doubles input tokens (57k vs 28k per call). 7 of 3,805 calls hit the 64k output cap. The planned fix, by the user's request:
+
+- `max_output_tokens` about 4-5k (config uses 4500); the default is 64000. This is the only change: reasoning stays on at effort high. The cap includes the reasoning, so a call that exceeds it is cut off and retried. About 2.4% of DeepSeek calls exceeded 5k tokens in the uncapped one-round runs, so expect that share of retries.
+- Reasoning cannot be kept and not paid for: reasoning tokens are billed as output whether or not they are returned. The alternatives, not chosen, are `reasoning_effort: none` (thinking disabled) or a lower effort.
+- Config: `configs/baseline-5round-deepseek-cap.yaml`, writing to `runs/baseline-5round-deepseek-cap`. A separate condition; do not pool with the uncapped runs. The same key applies to a no-communication variant.
+- It does not prevent the rep 17 overflow (a 6 MB `run_tests` result); that needs a separate cap on tool output.
+
 ## 8. Things that tripped this session
 
 - **"50x10" is the pool, not the run size.** Say "reps 6-25 of the 50x10 set" for what was run.

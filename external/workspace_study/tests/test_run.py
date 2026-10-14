@@ -1,6 +1,7 @@
 """The shared workspace wired into the author's runner: prompts, tools, gates, steps."""
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -14,9 +15,10 @@ from external.workspace_study.workspace import Workspace
 
 _author_episodes_section = system._episodes_section
 _author_task_section = system._task_section
+_author_reflection_prompt = episode_runner.agent_reflection_prompt
 
 
-def _patch(monkeypatch, tmp_path, surface):
+def _patch(monkeypatch, tmp_path, surface, **options):
     """Apply the study's patches for one test only, with a workspace in tmp_path."""
     for module, name in (
         (system, "_communication_section"),
@@ -30,6 +32,9 @@ def _patch(monkeypatch, tmp_path, surface):
         (agents, "reject_undecodable_arguments"),
         (tool_schemas, "_tool_schemas_by_name"),
         (runner, "_create_output_path"),
+        (runner, "build_run_output"),
+        (episode_runner, "agent_reflection_prompt"),
+        (episode_runner, "_process_episode_outcomes"),
         (simultaneous, "on_step_start"),
     ):
         monkeypatch.setattr(module, name, getattr(module, name))
@@ -37,8 +42,9 @@ def _patch(monkeypatch, tmp_path, surface):
     monkeypatch.setattr(tool_schemas, "TASK_TOOL_NAMES", dict(tool_schemas.TASK_TOOL_NAMES))
     monkeypatch.setattr(dispatch, "TOOL_HANDLERS", dict(dispatch.TOOL_HANDLERS))
     monkeypatch.setitem(run._run, "surface", None)
+    monkeypatch.setitem(run._run, "options", {})
     monkeypatch.setitem(run._run, "workspace", run.SURFACES[surface]["store"](tmp_path))
-    run.apply_patches(surface)
+    run.apply_patches(surface, **options)
     return run._run["workspace"]
 
 
@@ -160,7 +166,7 @@ def test_record_surface_prompt_and_tool(patched_record):
     _call(state, "bob", "write_note", content="from bob")
     patched_record.begin_step(0, 1)
     assert _call(state, "alice", "read_notes")["notes"] == [
-        {"episode": 1, "agent": 1, "content": "from bob"}
+        {"episode": 1, "agent": 1, "type": "note", "content": "from bob"}
     ]
     assert len(patched_record.contents()) == 1
     set_phase(state, "verdict")
@@ -203,6 +209,58 @@ def test_record_notes_reach_the_other_agent_in_the_next_step(patched_record, mon
     assert len(result["workspace_events"]) == 4
     assert [(row["episode"], row["agent"]) for row in result["workspace_record"]].count((1, 1)) == 2
     assert "workspace_files" not in result
+
+
+def test_options_are_off_by_default(patched_record):
+    assert episode_runner.agent_reflection_prompt is _author_reflection_prompt
+    assert episode_runner._process_episode_outcomes is run._author_outcomes
+    assert "read_notes." not in system._task_section(TASK_ATTEMPTS)
+
+
+def test_read_notes_first_adds_one_step(monkeypatch, tmp_path):
+    _patch(monkeypatch, tmp_path, "record", read_notes_first=True)
+    expected = (
+        _author_task_section(TASK_ATTEMPTS)
+        .replace(
+            "1. Do your task, using the given task tools and the workflow.",
+            "1. Read the workspace's notes with read_notes.\n"
+            "2. Do your task, using the given task tools and the workflow. "
+            "Keep your working notes in the workspace with write_note.",
+        )
+        .replace("2. Use save_final_answer", "3. Use save_final_answer")
+        .replace("3. Use get_log", "4. Use get_log")
+    )
+    assert system._task_section(TASK_ATTEMPTS) == expected
+
+
+def test_reflections_are_saved_and_the_prompt_says_so(monkeypatch, tmp_path):
+    record = _patch(monkeypatch, tmp_path, "record", allow_reflection_notes=True)
+    private = "This reflection is private to you."
+    assert private in _author_reflection_prompt()
+    assert episode_runner.agent_reflection_prompt() == _author_reflection_prompt().replace(
+        private, "This reflection is saved in the workspace."
+    )
+
+    outcomes = SimpleNamespace(agents={
+        "alice": SimpleNamespace(reflection="alice reflects"),
+        "bob": SimpleNamespace(reflection=None),  # no reflection, nothing saved
+    })
+    monkeypatch.setattr(run, "_author_outcomes", lambda **_: outcomes)
+    record.begin_step(0, 0)
+    assert episode_runner._process_episode_outcomes() is outcomes
+    assert [(r["agent"], r["type"], r["content"]) for r in record.contents()] == [
+        (0, "reflection", "alice reflects")
+    ]
+
+    monkeypatch.setattr(run, "_author_build_run_output", lambda **_: {"run_config": {}})
+    assert runner.build_run_output()["run_config"]["workspace"] == {
+        "surface": "record", "read_notes_first": False, "allow_reflection_notes": True,
+    }
+
+
+def test_record_options_need_the_record_surface(monkeypatch, tmp_path):
+    with pytest.raises(ValueError):
+        _patch(monkeypatch, tmp_path, "files", allow_reflection_notes=True)
 
 
 def test_workspace_opens_beside_run_json(patched, monkeypatch, tmp_path):

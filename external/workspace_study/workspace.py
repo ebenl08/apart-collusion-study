@@ -226,9 +226,14 @@ class Record(_Store):
 
     A row is never edited or removed, so nothing can be overwritten; the lock only keeps
     two appends in the same step from interleaving. Agents see each row as
-    ``{"episode", "agent", "content"}``: the 1-based episode and the writer's position
-    in AGENT_IDS (Alice 0, Bob 1). ``id`` and ``step`` stay on disk for analysis; shown
-    to agents, an id would have gaps wherever the other agent wrote in the same step.
+    ``{"episode", "agent", "type", "content"}``: the 1-based episode, the writer's
+    position in AGENT_IDS (Alice 0, Bob 1), and ``note`` or ``reflection``. ``id`` and
+    ``step`` stay on disk for analysis; shown to agents, an id would have gaps wherever
+    the other agent wrote in the same step.
+
+    A ``note`` is written by an agent with write_note. A ``reflection`` is the agent's
+    end-of-episode reflection, appended by the runner when the run saves reflections
+    to the workspace (``add_reflection``).
     """
 
     RESULT_KEY = "workspace_record"
@@ -246,7 +251,37 @@ class Record(_Store):
         """The step snapshot plus the caller's own rows since, in a timing-free order."""
         seen = len(self._snapshot)
         rows = self._snapshot + [r for r in self._read_all()[seen:] if r["agent"] == agent]
-        return sorted(rows, key=lambda r: (r["episode"], r["step"], r["agent"], r["id"]))
+        # An episode's reflections come after its notes, whatever step the notes were in.
+        return sorted(
+            rows,
+            key=lambda r: (r["episode"], r["type"] == "reflection", r["step"], r["agent"], r["id"]),
+        )
+
+    def _append(self, actor: str, content: str, row_type: str) -> dict[str, Any]:
+        row = {
+            "id": len(self._read_all()),
+            "episode": (self._episode or 0) + 1,
+            "step": self._step or 0,
+            "agent": AGENT_IDS.index(actor),
+            "type": row_type,
+            "content": content,
+        }
+        with open(self._record_path, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+        return row
+
+    def add_reflection(self, actor: str, content: str) -> None:
+        """Append an agent's end-of-episode reflection. Called by the runner, not by a tool."""
+        with self._locked():
+            row = self._append(actor, content, "reflection")
+            self._journal(
+                actor=actor,
+                op="reflection",
+                result={"success": True},
+                file=row["id"],
+                owner=actor,
+                content=content,
+            )
 
     def write(self, actor: str, content: str) -> dict[str, Any]:
         with self._locked():
@@ -258,15 +293,7 @@ class Record(_Store):
                 self._journal(actor=actor, op="write", result=result, content=content)
                 return result
             agent = AGENT_IDS.index(actor)
-            row = {
-                "id": len(self._read_all()),
-                "episode": (self._episode or 0) + 1,
-                "step": self._step or 0,
-                "agent": agent,
-                "content": content,
-            }
-            with open(self._record_path, "a", encoding="utf-8") as handle:
-                handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+            row = self._append(actor, content, "note")
             visible = self._visible(agent)
             result = {"success": True, "notes": self._shown(visible)}
             self._journal(
@@ -282,7 +309,7 @@ class Record(_Store):
 
     @staticmethod
     def _shown(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        return [{k: r[k] for k in ("episode", "agent", "content")} for r in rows]
+        return [{k: r[k] for k in ("episode", "agent", "type", "content")} for r in rows]
 
     def read(self, actor: str) -> dict[str, Any]:
         with self._locked():
