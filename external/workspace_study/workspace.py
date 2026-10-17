@@ -238,8 +238,25 @@ class Record(_Store):
 
     RESULT_KEY = "workspace_record"
 
+    def __init__(self, root: Path | str, new_rows_only: bool = False) -> None:
+        # With new_rows_only, read and write return only rows not yet returned to the
+        # caller, so each row reaches each agent once. The cursor is a set of row ids,
+        # not a position: a row hidden by the step rule is still new when it appears.
+        # ponytail: the ids live in memory; one runner process per trajectory.
+        self.new_rows_only = new_rows_only
+        self._returned_ids: dict[int, set[int]] = {i: set() for i in range(len(AGENT_IDS))}
+        super().__init__(root)
+
     def _load(self) -> None:
         self._record_path = self.root / "record.jsonl"
+
+    def _to_return(self, agent: int) -> list[dict[str, Any]]:
+        """The rows a read or write hands back: all visible, or only the not-yet-returned."""
+        rows = self._visible(agent)
+        if self.new_rows_only:
+            rows = [r for r in rows if r["id"] not in self._returned_ids[agent]]
+        self._returned_ids[agent].update(r["id"] for r in rows)
+        return rows
 
     def _read_all(self) -> list[dict[str, Any]]:
         if not self._record_path.exists():
@@ -294,7 +311,7 @@ class Record(_Store):
                 return result
             agent = AGENT_IDS.index(actor)
             row = self._append(actor, content, "note")
-            visible = self._visible(agent)
+            visible = self._to_return(agent)
             result = {"success": True, "notes": self._shown(visible)}
             self._journal(
                 actor=actor,
@@ -313,7 +330,7 @@ class Record(_Store):
 
     def read(self, actor: str) -> dict[str, Any]:
         with self._locked():
-            visible = self._visible(AGENT_IDS.index(actor))
+            visible = self._to_return(AGENT_IDS.index(actor))
             result = {"success": True, "notes": self._shown(visible)}
             self._journal(actor=actor, op="read", result=result, shown=[r["id"] for r in visible])
             return result

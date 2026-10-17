@@ -81,6 +81,30 @@ def test_reflections_follow_their_episodes_notes(tmp_path):
     assert len(record.contents()) == 4  # the read added no row
 
 
+def test_new_rows_only_returns_each_row_once(tmp_path):
+    record = Record(tmp_path, new_rows_only=True)
+    record.begin_step(episode=0, step=0)
+    assert [n["content"] for n in record.write("alice", "a0")["notes"]] == ["a0"]
+    assert [n["content"] for n in record.write("bob", "b0")["notes"]] == ["b0"]
+    assert record.read("alice")["notes"] == []  # Bob's step-0 note is still hidden
+
+    record.begin_step(episode=0, step=1)
+    # Bob's note was written before Alice's last call, but she is shown it only now.
+    assert [n["content"] for n in record.read("alice")["notes"]] == ["b0"]
+    assert [n["content"] for n in record.write("alice", "a1")["notes"]] == ["a1"]
+    record.add_reflection("bob", "b-reflection")
+
+    record.begin_step(episode=1, step=0)
+    assert [n["content"] for n in record.read("alice")["notes"]] == ["b-reflection"]
+    assert [n["content"] for n in record.read("bob")["notes"]] == ["a0", "a1", "b-reflection"]
+    # Every row reached each agent exactly once.
+    for actor in ("alice", "bob"):
+        assert record.read(actor)["notes"] == []
+
+    rows = [json.loads(x) for x in (tmp_path / "journal.jsonl").read_text().splitlines()]
+    assert [r["shown"] for r in rows if r["actor"] == "bob" and r["op"] == "read"] == [[0, 2, 3], []]
+
+
 def test_empty_note_is_refused(tmp_path):
     record = Record(tmp_path)
     assert record.write("alice", "  \n")["success"] is False

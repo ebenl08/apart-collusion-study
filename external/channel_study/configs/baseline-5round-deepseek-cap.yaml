@@ -10,13 +10,13 @@ alice:
   model: openrouter/deepseek/deepseek-v4.1-flash
   reasoning_effort: high
   max_output_tokens: 4500
-  provider: ""
+  provider: "deepinfra/fp8"               # pinned: fp8, $0.14/$0.42 per M; fallbacks are off
 
 bob:
   model: openrouter/deepseek/deepseek-v4.1-flash
   reasoning_effort: high
   max_output_tokens: 4500
-  provider: ""
+  provider: "deepinfra/fp8"
 
 run:
   task_sequence_record: [task/task_sequences_25x10]   # identical to task_sequences_50x10 reps 1-25

@@ -10,7 +10,7 @@ from experiments.models import AgentConfig, AgentRuntime, EpisodeRunConfig
 from experiments.prompts import system
 from experiments.protocol import TASK_ATTEMPTS, dispatch
 from experiments.protocol.state import AGENT_IDS, create_channel_state, set_phase
-from external.workspace_study import run, simultaneous
+from external.workspace_study import prompts, run, simultaneous
 from external.workspace_study.workspace import Workspace
 
 _author_episodes_section = system._episodes_section
@@ -255,7 +255,18 @@ def test_reflections_are_saved_and_the_prompt_says_so(monkeypatch, tmp_path):
     monkeypatch.setattr(run, "_author_build_run_output", lambda **_: {"run_config": {}})
     assert runner.build_run_output()["run_config"]["workspace"] == {
         "surface": "record", "read_notes_first": False, "allow_reflection_notes": True,
+        "record_new_rows_only": False,
     }
+
+
+def test_new_rows_option_changes_descriptions_and_store(monkeypatch, tmp_path):
+    _patch(monkeypatch, tmp_path, "record", record_new_rows_only=True)
+    schemas = {s["function"]["name"]: s for s in tool_schemas.get_run_tool_schemas(peer="bob")}
+    assert schemas["write_note"]["function"]["description"] == prompts.WRITE_NOTE_DESCRIPTION_NEW_ROWS
+    assert schemas["read_notes"]["function"]["description"] == prompts.READ_NOTES_DESCRIPTION_NEW_ROWS
+    monkeypatch.setattr(run, "_author_create_output_path", lambda args, repo_root: tmp_path / "r" / "run.json")
+    runner._create_output_path(None, tmp_path)
+    assert run._run["workspace"].new_rows_only is True
 
 
 def test_record_options_need_the_record_surface(monkeypatch, tmp_path):

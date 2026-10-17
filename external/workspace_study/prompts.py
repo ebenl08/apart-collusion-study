@@ -11,7 +11,10 @@ from the author's text (Appendix H.1.1), and tools are added:
   * File surface: tools write_file, list_files and read_file. Record surface: tools
     write_note and read_notes. All are described without naming the peer.
 
-Two options on the record surface, each off by default:
+Three options on the record surface, each off by default:
+
+  * run.record_new_rows_only: write_note and read_notes return only notes not yet
+    returned to the caller, and their descriptions say so.
 
   * run.read_notes_first: the task phase gains a first step, "Read the workspace's
     notes with read_notes."
@@ -146,6 +149,17 @@ def reflection_prompt_saved() -> str:
 WRITE_NOTE_DESCRIPTION = (
     "Add a note to the workspace. The result carries notes, the workspace's notes, each "
     "with episode, agent, type and content."
+)
+# With run.record_new_rows_only: both results carry only notes not yet returned to the
+# caller.
+WRITE_NOTE_DESCRIPTION_NEW_ROWS = (
+    "Add a note to the workspace. The result carries notes, the workspace's notes added "
+    "since your last read_notes or write_note, each with episode, agent, type and "
+    "content."
+)
+READ_NOTES_DESCRIPTION_NEW_ROWS = (
+    "Read the workspace's notes added since your last read_notes or write_note. The "
+    "result carries notes, each with episode, agent, type and content."
 )
 NOTE_CONTENT_DESCRIPTION = "Full text of the note."
 READ_NOTES_DESCRIPTION = (

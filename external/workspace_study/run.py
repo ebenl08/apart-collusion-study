@@ -16,6 +16,8 @@ Two options on the record surface, from ``run.read_notes_first`` and
                                call read_notes
     --allow-reflection-notes   the reflection prompt says the reflection is saved in the
                                workspace, and the runner appends each one to the record
+    --record-new-rows-only     write_note and read_notes return only rows not yet returned
+                               to the caller (run.record_new_rows_only)
 
 Nothing in the author's files is edited. Patches, on top of simultaneous.py's:
 
@@ -45,6 +47,7 @@ CHILD_MODULE = "external.workspace_study.run"
 WORKSPACE_FLAG = "--workspace"
 READ_FIRST_FLAG = "--read-notes-first"
 REFLECTION_NOTES_FLAG = "--allow-reflection-notes"
+NEW_ROWS_FLAG = "--record-new-rows-only"
 
 _author_tool_schemas_by_name = tool_schemas._tool_schemas_by_name
 _author_build_result = episode_runner.build_episode_result
@@ -106,11 +109,18 @@ def _file_schemas():
 
 def _record_schemas():
     content = {"type": "string", "description": prompts.NOTE_CONTENT_DESCRIPTION}
+    new_rows = _run["options"].get("record_new_rows_only")
     return {
         "write_note": _function_schema(
-            "write_note", prompts.WRITE_NOTE_DESCRIPTION, {"content": content}
+            "write_note",
+            prompts.WRITE_NOTE_DESCRIPTION_NEW_ROWS if new_rows else prompts.WRITE_NOTE_DESCRIPTION,
+            {"content": content},
         ),
-        "read_notes": _function_schema("read_notes", prompts.READ_NOTES_DESCRIPTION, {}),
+        "read_notes": _function_schema(
+            "read_notes",
+            prompts.READ_NOTES_DESCRIPTION_NEW_ROWS if new_rows else prompts.READ_NOTES_DESCRIPTION,
+            {},
+        ),
     }
 
 
@@ -177,7 +187,11 @@ def build_result_with_workspace(**kwargs):
 
 def create_output_path_and_workspace(args, repo_root):
     output_path = _author_create_output_path(args, repo_root)
-    _run["workspace"] = _run["surface"]["store"](output_path.parent / "workspace")
+    root = output_path.parent / "workspace"
+    if _run["options"].get("record_new_rows_only"):
+        _run["workspace"] = Record(root, new_rows_only=True)
+    else:
+        _run["workspace"] = _run["surface"]["store"](root)
     return output_path
 
 
@@ -203,26 +217,35 @@ def take_workspace_flags(argv: list[str]) -> dict:
     pre.add_argument(WORKSPACE_FLAG, choices=sorted(SURFACES), required=True)
     pre.add_argument(READ_FIRST_FLAG, action="store_true")
     pre.add_argument(REFLECTION_NOTES_FLAG, action="store_true")
+    pre.add_argument(NEW_ROWS_FLAG, action="store_true")
     known, rest = pre.parse_known_args(argv)
     argv[:] = rest
     return {
         "surface": known.workspace,
         "read_notes_first": known.read_notes_first,
         "allow_reflection_notes": known.allow_reflection_notes,
+        "record_new_rows_only": known.record_new_rows_only,
     }
 
 
 def apply_patches(
-    surface: str, read_notes_first: bool = False, allow_reflection_notes: bool = False
+    surface: str,
+    read_notes_first: bool = False,
+    allow_reflection_notes: bool = False,
+    record_new_rows_only: bool = False,
 ) -> None:
-    if surface != "record" and (read_notes_first or allow_reflection_notes):
-        raise ValueError("read_notes_first and allow_reflection_notes need the record surface.")
+    if surface != "record" and (read_notes_first or allow_reflection_notes or record_new_rows_only):
+        raise ValueError(
+            "read_notes_first, allow_reflection_notes and record_new_rows_only need the "
+            "record surface."
+        )
     simultaneous.apply_patches()
     _run["surface"] = SURFACES[surface]
     _run["options"] = {
         "surface": surface,
         "read_notes_first": read_notes_first,
         "allow_reflection_notes": allow_reflection_notes,
+        "record_new_rows_only": record_new_rows_only,
     }
     runner.build_run_output = build_run_output_with_workspace
     if allow_reflection_notes:

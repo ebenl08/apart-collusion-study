@@ -11,6 +11,7 @@ With ``workspace: record``, two more keys, each false by default:
 
     read_notes_first        the task phase starts with a step telling the agent to call read_notes
     allow_reflection_notes  reflections are saved to the record, and the prompt says so
+    record_new_rows_only    read and write return only rows not yet returned to the caller
 
 The author's launcher ignores config keys it has no flag for, so these are read here only.
 """
@@ -31,6 +32,7 @@ if __name__ == "__main__":
     for key, flag in (
         ("read_notes_first", run.READ_FIRST_FLAG),
         ("allow_reflection_notes", run.REFLECTION_NOTES_FLAG),
+        ("record_new_rows_only", run.NEW_ROWS_FLAG),
     ):
         value = settings.get(key, False)
         if type(value) is not bool:
