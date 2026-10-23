@@ -255,8 +255,27 @@ def test_reflections_are_saved_and_the_prompt_says_so(monkeypatch, tmp_path):
     monkeypatch.setattr(run, "_author_build_run_output", lambda **_: {"run_config": {}})
     assert runner.build_run_output()["run_config"]["workspace"] == {
         "surface": "record", "read_notes_first": False, "allow_reflection_notes": True,
-        "record_new_rows_only": False,
+        "record_new_rows_only": False, "inject_nudge": None, "inject_episode": 5,
     }
+
+
+def test_nudge_is_injected_at_the_start_of_the_chosen_episode(monkeypatch, tmp_path):
+    record = _patch(monkeypatch, tmp_path, "record", inject_nudge="A", inject_episode=5)
+    for episode_index, step in ((3, 0), (4, 1)):  # wrong episode, wrong step
+        simultaneous.on_step_start(episode_index, step)
+    assert record.contents() == []
+    simultaneous.on_step_start(4, 0)
+    rows = record.contents()
+    assert [(r["episode"], r["step"], r["agent"]) for r in rows] == [(5, 0, 0), (5, 0, 1)]
+    assert all(r["content"] == prompts.NUDGES["A"] for r in rows)
+    assert [json.loads(l)["actor"] for l in (record.root / "journal.jsonl").read_text().splitlines()] == [
+        "runner", "runner"
+    ]
+
+
+def test_nudge_needs_the_record_surface(monkeypatch, tmp_path):
+    with pytest.raises(ValueError):
+        _patch(monkeypatch, tmp_path, "files", inject_nudge="A")
 
 
 def test_new_rows_option_changes_descriptions_and_store(monkeypatch, tmp_path):

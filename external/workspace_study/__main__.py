@@ -41,6 +41,16 @@ if __name__ == "__main__":
             raise ValueError(f"run.{key} is set, but run.workspace is not record.")
         if value:
             extra.append(flag)
+    nudge = settings.get("inject_nudge")
+    if nudge:
+        if surface != "record":
+            raise ValueError("run.inject_nudge is set, but run.workspace is not record.")
+        extra += [
+            run.INJECT_NUDGE_FLAG,
+            str(nudge),
+            run.INJECT_EPISODE_FLAG,
+            str(settings.get("inject_episode", 5)),
+        ]
     build = cli._build_runner_command
     cli._build_runner_command = lambda **kw: [
         child if part == "experiments.runner" else part for part in build(**kw)

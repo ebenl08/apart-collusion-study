@@ -48,6 +48,8 @@ WORKSPACE_FLAG = "--workspace"
 READ_FIRST_FLAG = "--read-notes-first"
 REFLECTION_NOTES_FLAG = "--allow-reflection-notes"
 NEW_ROWS_FLAG = "--record-new-rows-only"
+INJECT_NUDGE_FLAG = "--inject-nudge"
+INJECT_EPISODE_FLAG = "--inject-episode"
 
 _author_tool_schemas_by_name = tool_schemas._tool_schemas_by_name
 _author_build_result = episode_runner.build_episode_result
@@ -174,6 +176,9 @@ def tool_schemas_with_workspace(peer):
 
 def begin_workspace_step(episode_index, step):
     _run["workspace"].begin_step(episode_index, step)
+    nudge = _run["options"].get("inject_nudge")
+    if nudge and step == 0 and episode_index == _run["options"]["inject_episode"] - 1:
+        _run["workspace"].inject(prompts.NUDGES[nudge])
 
 
 def build_result_with_workspace(**kwargs):
@@ -218,6 +223,8 @@ def take_workspace_flags(argv: list[str]) -> dict:
     pre.add_argument(READ_FIRST_FLAG, action="store_true")
     pre.add_argument(REFLECTION_NOTES_FLAG, action="store_true")
     pre.add_argument(NEW_ROWS_FLAG, action="store_true")
+    pre.add_argument(INJECT_NUDGE_FLAG, choices=sorted(prompts.NUDGES))
+    pre.add_argument(INJECT_EPISODE_FLAG, type=int, default=5)
     known, rest = pre.parse_known_args(argv)
     argv[:] = rest
     return {
@@ -225,6 +232,8 @@ def take_workspace_flags(argv: list[str]) -> dict:
         "read_notes_first": known.read_notes_first,
         "allow_reflection_notes": known.allow_reflection_notes,
         "record_new_rows_only": known.record_new_rows_only,
+        "inject_nudge": known.inject_nudge,
+        "inject_episode": known.inject_episode,
     }
 
 
@@ -233,11 +242,15 @@ def apply_patches(
     read_notes_first: bool = False,
     allow_reflection_notes: bool = False,
     record_new_rows_only: bool = False,
+    inject_nudge: str | None = None,
+    inject_episode: int = 5,
 ) -> None:
-    if surface != "record" and (read_notes_first or allow_reflection_notes or record_new_rows_only):
+    if surface != "record" and (
+        read_notes_first or allow_reflection_notes or record_new_rows_only or inject_nudge
+    ):
         raise ValueError(
-            "read_notes_first, allow_reflection_notes and record_new_rows_only need the "
-            "record surface."
+            "read_notes_first, allow_reflection_notes, record_new_rows_only and inject_nudge "
+            "need the record surface."
         )
     simultaneous.apply_patches()
     _run["surface"] = SURFACES[surface]
@@ -246,6 +259,8 @@ def apply_patches(
         "read_notes_first": read_notes_first,
         "allow_reflection_notes": allow_reflection_notes,
         "record_new_rows_only": record_new_rows_only,
+        "inject_nudge": inject_nudge,
+        "inject_episode": inject_episode,
     }
     runner.build_run_output = build_run_output_with_workspace
     if allow_reflection_notes:

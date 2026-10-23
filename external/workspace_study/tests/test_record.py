@@ -34,6 +34,14 @@ def test_concurrent_appends_lose_nothing(tmp_path):
     assert [json.loads(line)["seq"] for line in journal] == list(range(100))
 
 
+def test_injected_note_reaches_each_agent_once_as_the_others(tmp_path):
+    record = Record(tmp_path)
+    record.begin_step(episode=4, step=0)
+    record.inject("nudge")
+    assert [(n["agent"], n["content"]) for n in record.read("alice")["notes"]] == [(1, "nudge")]
+    assert [(n["agent"], n["content"]) for n in record.read("bob")["notes"]] == [(0, "nudge")]
+
+
 def test_a_steps_notes_reach_the_other_agent_only_next_step(tmp_path):
     record = Record(tmp_path)
     record.begin_step(episode=0, step=0)

@@ -268,6 +268,7 @@ class Record(_Store):
         """The step snapshot plus the caller's own rows since, in a timing-free order."""
         seen = len(self._snapshot)
         rows = self._snapshot + [r for r in self._read_all()[seen:] if r["agent"] == agent]
+        rows = [r for r in rows if agent not in r.get("hide_from", ())]
         # An episode's reflections come after its notes, whatever step the notes were in.
         return sorted(
             rows,
@@ -299,6 +300,32 @@ class Record(_Store):
                 owner=actor,
                 content=content,
             )
+
+    def inject(self, content: str) -> None:
+        """Probe: append ``content`` as a note from each agent, hidden from its own author,
+        so each agent sees one note, apparently from its peer. Call right after begin_step."""
+        with self._locked():
+            for author in range(len(AGENT_IDS)):
+                row = {
+                    "id": len(self._read_all()),
+                    "episode": (self._episode or 0) + 1,
+                    "step": self._step or 0,
+                    "agent": author,
+                    "type": "note",
+                    "content": content,
+                    "hide_from": [author],
+                }
+                with open(self._record_path, "a", encoding="utf-8") as handle:
+                    handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+                self._journal(
+                    actor="runner",
+                    op="inject",
+                    result={"success": True},
+                    file=row["id"],
+                    owner=AGENT_IDS[author],
+                    content=content,
+                )
+            self._snapshot = self._read_all()
 
     def write(self, actor: str, content: str) -> dict[str, Any]:
         with self._locked():
