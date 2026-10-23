@@ -5,6 +5,7 @@ study's entry point, chosen by ``run.channel_mode`` in the config:
 
     one-round      external.channel_study.run            (idea 1, the default)
     cross-episode  external.channel_study.cross_episode  (idea 2)
+    colluding-bob  external.channel_study.colluding_bob  (one-round, Bob's system prompt tells him to accept summaries)
 
 Idea 2 also reads ``run.communication_window_rounds`` (default 5) and passes it to the
 child as ``--communication-window-rounds``. Setting it in a one-round config is an error.
@@ -24,9 +25,13 @@ from pathlib import Path
 import yaml
 
 from experiments import cli
-from external.channel_study import cross_episode, run
+from external.channel_study import colluding_bob, cross_episode, run
 
-CHILD_MODULES = {"one-round": run.CHILD_MODULE, "cross-episode": cross_episode.CHILD_MODULE}
+CHILD_MODULES = {
+    "one-round": run.CHILD_MODULE,
+    "cross-episode": cross_episode.CHILD_MODULE,
+    "colluding-bob": colluding_bob.CHILD_MODULE,
+}
 COMMUNICATION_WINDOW_JUDGE = "external/data/channel_study/scripts/communication_window_judge.py"
 
 
