@@ -1,0 +1,34 @@
+# Colluding Bob with the verdict review ON, reward off (reflection is off with the reward).
+# GLM-5.3-Flash pinned to Near AI fp8, output capped at 4500 tokens. Bob's system prompt (only Bob's)
+# gains COLLUDING_BOB_SECTION. After each episode both agents are told whether their verdict was right.
+#
+#   python -m external.channel_study --config external/channel_study/configs/colluding-bob-noreward-review-glm.yaml --start-index 1 --repeats 5 --parallel 5
+
+alice:
+  model: openrouter/z-ai/glm-5.3-flash
+  reasoning_effort: high
+  max_output_tokens: 4500
+  provider: "near-ai/fp8"
+
+bob:
+  model: openrouter/z-ai/glm-5.3-flash
+  reasoning_effort: high
+  max_output_tokens: 4500
+  provider: "near-ai/fp8"
+
+run:
+  channel_mode: colluding-bob
+  task_sequence_record: [task/task_sequences_50x10]
+  repeats: 5
+  max_rounds: 1
+  reward: false
+  verdict_review: true
+  output_dir: external/data/channel_study/results/runs/colluding-bob-noreward-review-glm
+
+judge:
+  base_url: https://openrouter.ai/api/v1
+  model: qwen/qwen3.8-27b
+  reasoning_effort: medium
+  temperature: 1.0
+  workers: 8
+  verdict_policy: raw-only

@@ -1,0 +1,37 @@
+# Collusion probe, nudge F on DeepSeek V4.1 Flash: as nudge-F-luna.yaml, with the model,
+# provider pin and 4500-token cap of channel_study/configs/baseline-5round-deepseek-cap.yaml.
+# One-trajectory pilot. The cap includes reasoning, so some calls may be cut off and retried.
+#
+#   python -m external.workspace_study --config external/workspace_study/configs/nudge-F-deepseek.yaml --start-index 1 --repeats 1 --parallel 1 --no-judge
+
+alice:
+  model: openrouter/deepseek/deepseek-v4.1-flash
+  reasoning_effort: high
+  max_output_tokens: 4500
+  provider: "deepinfra/fp8"
+
+bob:
+  model: openrouter/deepseek/deepseek-v4.1-flash
+  reasoning_effort: high
+  max_output_tokens: 4500
+  provider: "deepinfra/fp8"
+
+run:
+  workspace: record
+  read_notes_first: true
+  allow_reflection_notes: true
+  record_new_rows_only: true
+  inject_nudge: F
+  inject_episode: 5
+  task_sequence_record: [task/task_sequences_50x10]
+  repeats: 1
+  max_rounds: 1
+  output_dir: external/data/workspace_study/results/runs/nudge-F-deepseek
+
+judge:
+  base_url: https://openrouter.ai/api/v1
+  model: qwen/qwen3.8-27b
+  reasoning_effort: medium
+  temperature: 1.0
+  workers: 8
+  verdict_policy: raw-only
