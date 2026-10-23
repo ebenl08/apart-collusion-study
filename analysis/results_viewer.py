@@ -28,7 +28,7 @@ from collections import defaultdict, deque
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_RESULTS = ROOT / "results"
@@ -506,9 +506,17 @@ def compute_metrics(run: dict, tables: dict) -> dict:
             "groups": sorted(groups.values(), key=lambda b: (b["group"], b["verdict_policy"]))}
 
 
+NOTES_FILE = "notes.md"  # the reader's own notes on a run, written beside run.json
+
+
 class ViewerHandler(BaseHTTPRequestHandler):
     server_version = "ResultsViewer/1.0"
-    results_root: Path = DEFAULT_RESULTS
+    results_roots: list[Path] = [DEFAULT_RESULTS]
+    results_root: Path = DEFAULT_RESULTS  # set per request from ?root=<index>
+
+    def _pick_root(self) -> None:
+        index = int(parse_qs(urlparse(self.path).query).get("root", ["0"])[0])
+        self.results_root = self.results_roots[index]
 
     # --- plumbing -----------------------------------------------------------
     def log_message(self, fmt: str, *args) -> None:  # quieter console
@@ -558,6 +566,10 @@ class ViewerHandler(BaseHTTPRequestHandler):
             self._error(HTTPStatus.NOT_FOUND, "not found")
             return
         try:
+            if parts[1:] == ["roots"]:
+                self._send_json([str(r) for r in self.results_roots])
+                return
+            self._pick_root()
             if parts[1:] == ["tree"]:
                 self._send_json(build_tree(self.results_root))
                 return
@@ -583,6 +595,10 @@ class ViewerHandler(BaseHTTPRequestHandler):
                         table["cache"] = attach_cache(metric, cache_name, table, run_dir)
                         tables[name] = table
                     self._send_json(compute_metrics(run, tables))
+                    return
+                if parts[4] == "notes":
+                    notes = run_dir / NOTES_FILE
+                    self._send_json({"text": notes.read_text(encoding="utf-8") if notes.is_file() else ""})
                     return
                 if parts[4] == "run.json":
                     self._send(
@@ -610,6 +626,23 @@ class ViewerHandler(BaseHTTPRequestHandler):
             self._error(HTTPStatus.INTERNAL_SERVER_ERROR, f"{type(exc).__name__}: {exc}")
 
     do_HEAD = do_GET
+
+    def do_POST(self) -> None:  # noqa: N802 (http.server API)
+        """Save the reader's notes for one run to <run dir>/notes.md."""
+        parts = [unquote(p) for p in urlparse(self.path).path.strip("/").split("/") if p]
+        try:
+            self._pick_root()
+            if len(parts) == 5 and parts[:2] == ["api", "run"] and parts[4] == "notes":
+                run_dir = self._resolve_run(parts[2], parts[3])
+                length = int(self.headers.get("Content-Length") or 0)
+                (run_dir / NOTES_FILE).write_text(json.loads(self.rfile.read(length))["text"], encoding="utf-8")
+                self._send_json({"saved": True})
+                return
+            self._error(HTTPStatus.NOT_FOUND, "unknown endpoint")
+        except FileNotFoundError as exc:
+            self._error(HTTPStatus.NOT_FOUND, str(exc))
+        except Exception as exc:
+            self._error(HTTPStatus.INTERNAL_SERVER_ERROR, f"{type(exc).__name__}: {exc}")
 
 
 PAGE = r"""<!doctype html>
@@ -696,6 +729,8 @@ PAGE = r"""<!doctype html>
   }
   .card > h3 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase;
     letter-spacing: 0.06em; color: var(--muted); }
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+  .split > div { min-width: 0; }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
   .kv { display: grid; grid-template-columns: minmax(120px, 34%) 1fr; gap: 2px 12px; font-size: 13px; }
   .kv > dt { color: var(--muted); font-family: var(--mono); font-size: 12px; word-break: break-word; }
@@ -782,6 +817,16 @@ PAGE = r"""<!doctype html>
   .legend .item { display: flex; gap: 6px; align-items: center; }
   .legend .cell { height: 20px; min-width: 20px; font-size: 11px; }
   .card p.sub { font-size: 12px; margin: 10px 0 0; }
+  #notesToggle { position: fixed; right: 0; top: 40%; z-index: 20; writing-mode: vertical-rl; padding: 12px 6px;
+    border: 1px solid var(--line); border-right: 0; border-radius: 8px 0 0 8px; background: var(--panel);
+    color: var(--text); cursor: pointer; }
+  #notes { position: fixed; right: 0; top: 0; bottom: 0; width: min(420px, 90vw); z-index: 30; display: flex;
+    flex-direction: column; gap: 8px; padding: 12px; background: var(--panel); border-left: 1px solid var(--line);
+    box-shadow: -4px 0 16px rgba(0,0,0,0.15); }
+  #notes[hidden], #notesToggle[hidden], #rootTabs[hidden] { display: none; }
+  #notes .notes-head { display: flex; justify-content: space-between; align-items: baseline; }
+  #notesText { flex: 1; resize: none; padding: 8px; border: 1px solid var(--line); border-radius: 6px;
+    background: var(--panel-2); color: var(--text); font: 13px/1.5 var(--mono); }
   .muted { color: var(--muted); }
   .note { color: var(--muted); padding: 24px 0; }
   @media (max-width: 720px) {
@@ -798,18 +843,25 @@ PAGE = r"""<!doctype html>
   <span class="spacer"></span>
   <button id="reload">Reload</button>
 </header>
+<nav class="tabs models" id="rootTabs" hidden></nav>
 <nav class="tabs models" id="modelTabs"></nav>
 <nav class="tabs runs" id="launchTabs"></nav>
 <nav class="tabs runs" id="runTabs"></nav>
 <section id="runHead"></section>
 <nav class="tabs sections" id="sectionTabs"></nav>
 <main id="view"><p class="note">Loading&hellip;</p></main>
+<button id="notesToggle" hidden>Notes</button>
+<aside id="notes" hidden>
+  <div class="notes-head"><b id="notesTitle">Notes</b><span id="notesStatus" class="muted"></span></div>
+  <textarea id="notesText" placeholder="Your thoughts on this run&hellip; saved to notes.md beside run.json"></textarea>
+</aside>
 <script>
 const SECTIONS = [
   ["overview", "Overview"],
   ["metrics", "Metrics"],
   ["episodes", "Episodes"],
   ["reflections", "Reflections"],
+  ["reasoning", "Reasoning"],
   ["agreement.csv", "agreement.csv"],
   ["relaxation.csv", "relaxation.csv"],
   ["raw", "run.json"],
@@ -906,8 +958,11 @@ function judgeBadge(item) {
 
 /* ---------- fetching ---------- */
 
+let rootIdx = 0, roots = [];
+const rooted = (url) => url + "?root=" + rootIdx;
+
 async function getJSON(url) {
-  const res = await fetch(url);
+  const res = await fetch(rooted(url));
   const payload = await res.json();
   if (!res.ok) throw new Error(payload.error || res.statusText);
   return payload;
@@ -1121,8 +1176,43 @@ function renderLaunchHead(launch, summary) {
   head.append(chips);
 }
 
+/* Notes drawer: one notes.md per run, saved on a short pause after typing. */
+const notes = { key: null, timer: null, loaded: false };
+async function saveNotes() {
+  if (!notes.loaded) return;
+  clearTimeout(notes.timer);
+  const url = notes.key, status = $("#notesStatus");
+  try {
+    const res = await fetch(rooted(url), { method: "POST", body: JSON.stringify({ text: $("#notesText").value }) });
+    if (!res.ok) throw new Error((await res.json()).error || res.statusText);
+    if (url === notes.key) status.textContent = "saved";
+  } catch (err) { status.textContent = "not saved: " + err.message; }
+}
+async function syncNotes() {
+  const toggle = $("#notesToggle"), box = $("#notes");
+  if (notes.loaded) await saveNotes();
+  notes.loaded = false;
+  if (!state.run) { toggle.hidden = true; box.hidden = true; notes.key = null; return; }
+  toggle.hidden = false;
+  notes.key = "/api/run/" + encodeURIComponent(state.model) + "/" + encodeURIComponent(state.run) + "/notes";
+  $("#notesTitle").textContent = "Notes · " + state.run;
+  $("#notesStatus").textContent = "";
+  try {
+    $("#notesText").value = (await getJSON(notes.key)).text;
+    notes.loaded = true;
+  } catch (err) { $("#notesStatus").textContent = "could not load: " + err.message; }
+}
+$("#notesToggle").addEventListener("click", () => { $("#notes").hidden = !$("#notes").hidden; });
+$("#notesText").addEventListener("input", () => {
+  $("#notesStatus").textContent = "typing…";
+  clearTimeout(notes.timer);
+  notes.timer = setTimeout(saveNotes, 700);
+});
+window.addEventListener("beforeunload", () => { if (notes.loaded && notes.timer) saveNotes(); });
+
 async function loadCurrent() {
   const view = $("#view");
+  syncNotes();
   if (!state.run) { await loadSummary(); return; }
   view.textContent = "";
   view.append(el("p", { class: "note", text: "Loading " + state.run + "…" }));
@@ -1150,8 +1240,85 @@ function renderView() {
   else if (state.section === "metrics") view.append(renderMetrics());
   else if (state.section === "episodes") view.append(renderEpisodes());
   else if (state.section === "reflections") view.append(renderReflections());
+  else if (state.section === "reasoning") view.append(renderReasoning());
   else if (state.section === "raw") view.append(renderRaw());
   else view.append(renderCsv(state.section));
+}
+
+/* The readable text of one trace: reasoning_content, else the text or summary parts of
+   reasoning_details. Encrypted parts are counted, not shown. */
+function traceText(t) {
+  const rt = t.reasoning_trace;
+  if (typeof rt === "string") return { text: rt, encrypted: 0 };
+  if (!rt || typeof rt !== "object") return { text: "", encrypted: 0 };
+  const details = rt["provider_specific_fields.reasoning_details"] || [];
+  const encrypted = details.filter((d) => d.type === "reasoning.encrypted").length;
+  const parts = details.map((d) => d.text || d.summary || "").filter(Boolean);
+  const text = rt.reasoning_content || rt["provider_specific_fields.reasoning"] || parts.join("\n\n");
+  return { text: text || "", encrypted };
+}
+
+/* Every reasoning trace of the run in order, filterable by agent, phase and text. */
+const reasoningView = { agent: "", phase: "", query: "", hideEmpty: false, split: false };
+function renderReasoning() {
+  const rows = [];
+  for (const ep of state.data.runJson.results || []) {
+    (ep.llm_reasoning_traces || []).forEach((t, j) => rows.push({ ep, t, j, ...traceText(t) }));
+  }
+  const root = el("div", {});
+  if (!rows.length) { root.append(el("p", { class: "note", text: "No reasoning traces in this run." })); return root; }
+  const uniq = (key) => [...new Set(rows.map((r) => r.t[key]).filter((v) => v !== null && v !== undefined))];
+  const select = (label, key, values) => {
+    const s = el("select", { onchange: () => { reasoningView[key] = s.value; draw(); } },
+      el("option", { value: "", text: "all " + label }), values.map((v) => el("option", { value: v, text: v })));
+    s.value = reasoningView[key];
+    return s;
+  };
+  const search = el("input", { type: "search", placeholder: "filter reasoning…", value: reasoningView.query,
+    oninput: () => { reasoningView.query = search.value; draw(); } });
+  const hide = el("input", { type: "checkbox", onchange: () => { reasoningView.hideEmpty = hide.checked; draw(); } });
+  hide.checked = reasoningView.hideEmpty;
+  const split = el("input", { type: "checkbox", onchange: () => { reasoningView.split = split.checked; draw(); } });
+  split.checked = reasoningView.split;
+  const count = el("span", { class: "muted" });
+  const list = el("div", {});
+  root.append(el("div", { class: "chips" },
+    select("agents", "agent", uniq("agent_id").map((a) => a)), select("phases", "phase", uniq("phase")),
+    search, el("label", {}, hide, " hide traces with no readable text"),
+    el("label", {}, split, " Alice | Bob columns"), count), list);
+  function draw() {
+    list.textContent = "";
+    const q = reasoningView.query.toLowerCase();
+    const shown = rows.filter((r) =>
+      (!reasoningView.agent || r.t.agent_id === reasoningView.agent) &&
+      (!reasoningView.phase || r.t.phase === reasoningView.phase) &&
+      (!reasoningView.hideEmpty || r.text) && (!q || r.text.toLowerCase().includes(q)));
+    count.textContent = shown.length + " / " + rows.length + " traces";
+    const entry = (r) => {
+      const a = (r.ep.agents || {})[r.t.agent_id] || {};
+      const verdict = r.t.phase === "verdict" && a.verdict
+        ? badge(a.verdict.toUpperCase() + (a.verdict_correct ? " ✓" : " ✗"), a.verdict_correct ? "pos" : "neg") : null;
+      return el("details", { open: "" }, el("summary", {},
+        el("b", { text: r.t.agent_id || "?" }), badge(r.t.phase || "?"), verdict,
+        r.t.round !== null && r.t.round !== undefined ? badge("round " + r.t.round) : null,
+        r.t.attempt ? badge("attempt " + r.t.attempt, "neg") : null,
+        el("span", { class: "muted", text: r.text.length + " chars" + (r.encrypted ? " · " + r.encrypted + " encrypted part(s)" : "") })),
+        el("div", { class: "body" }, el("pre", { text: r.text || "(no readable reasoning)" })));
+    };
+    const episodes = [...new Set(shown.map((r) => r.ep))];
+    for (const ep of episodes) {
+      const mine = shown.filter((r) => r.ep === ep);
+      list.append(el("h3", {}, "Episode " + ep.episode_index, el("code", { text: ep.episode_id })));
+      if (reasoningView.split) {
+        const col = (agent) => el("div", {}, el("h3", { text: agent }), mine.filter((r) => r.t.agent_id === agent).map(entry));
+        list.append(el("div", { class: "split" }, col("alice"), col("bob")));
+      } else {
+        mine.forEach((r) => list.append(entry(r)));
+      }
+    }
+  }
+  draw();
+  return root;
 }
 
 function renderReflections() {
@@ -1751,8 +1918,20 @@ function csvTable(cols, rows, view) {
 
 /* ---------- boot ---------- */
 
+function renderRootTabs() {
+  const bar = $("#rootTabs");
+  bar.hidden = roots.length < 2;
+  bar.textContent = "";
+  roots.forEach((path, i) => bar.append(el("button", {
+    class: "tab", role: "tab", title: path, "aria-selected": String(i === rootIdx),
+    onclick: async () => { rootIdx = i; cache.clear(); state.model = state.launch = state.run = null; location.hash = ""; await boot(); },
+  }, path.split("/").filter(Boolean).slice(-2).join("/"))));
+}
+
 async function boot() {
   try {
+    roots = await (await fetch("/api/roots")).json();
+    renderRootTabs();
     state.tree = await getJSON("/api/tree");
   } catch (err) {
     $("#view").textContent = "";
@@ -1801,24 +1980,24 @@ def find_port(host: str, preferred: int, attempts: int = 20) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--results", type=Path, default=DEFAULT_RESULTS, help="results directory to browse")
+    parser.add_argument("--results", type=Path, nargs="+", default=[DEFAULT_RESULTS],
+                        help="results directories to browse; several give a top navbar to switch between them")
     parser.add_argument("--host", default="127.0.0.1", help="interface to bind (default: 127.0.0.1)")
     parser.add_argument("--port", type=int, default=8765, help="preferred port; the next free one is used if taken")
     parser.add_argument("--no-browser", action="store_true", help="do not open a browser tab")
     args = parser.parse_args(argv)
 
-    results_root = args.results.resolve()
-    if not results_root.is_dir():
-        raise SystemExit(f"not a directory: {results_root}")
+    roots = [p.resolve() for p in args.results]
+    # workspace_study keeps its runs under results/runs
+    roots = [r / "runs" if not build_tree(r)["models"] and (r / "runs").is_dir() else r for r in roots]
+    for root in roots:
+        if not root.is_dir():
+            raise SystemExit(f"not a directory: {root}")
+        tree = build_tree(root)
+        run_count = sum(len(model["runs"]) for model in tree["models"])
+        print(f"results: {root}  ({len(tree['models'])} model dir(s), {run_count} run(s))")
 
-    tree = build_tree(results_root)
-    run_count = sum(len(model["runs"]) for model in tree["models"])
-    print(f"results: {results_root}")
-    print(f"found {len(tree['models'])} model dir(s), {run_count} run(s)")
-    if not run_count:
-        print("(nothing to show yet — the page will say so too)")
-
-    handler = type("BoundViewerHandler", (ViewerHandler,), {"results_root": results_root})
+    handler = type("BoundViewerHandler", (ViewerHandler,), {"results_roots": roots, "results_root": roots[0]})
     port = find_port(args.host, args.port)
     server = ThreadingHTTPServer((args.host, port), handler)
     url = f"http://{args.host}:{port}/"

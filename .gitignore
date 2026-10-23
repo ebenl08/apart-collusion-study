@@ -22,5 +22,6 @@ paper/
 analysis/results/
 _papers/
 external/data/
+external/reasoning_trace/*/
 .docs/
 external/hf/data/
