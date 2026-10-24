@@ -8,6 +8,11 @@ Reuses the author's launcher (experiments.cli) and swaps its child process for
     bob_task_cache:   <dir>   replay Bob's own task from <dir>/repNNN (needs a live Bob)
 
 Each repeat N gets the rep<N:03d> subfolder, as with controlled_bob_cache.
+
+Two more optional keys pick another child and pass it extra flags:
+
+    child_module: <dotted module>   instead of the replay child (e.g. ...bob_prompt)
+    child_args:   [--flag, value]   appended to the child's command line
 """
 
 import argparse
@@ -39,7 +44,13 @@ def task_cache_flags(settings: dict, run_index: int) -> list[str]:
 if __name__ == "__main__":
     settings = _run_config()
     build = cli._build_runner_command
+    child = settings.get("child_module", CHILD_MODULE)
+    if "child_module" in settings:
+        from external.fpr_confound_analysis.bob_prompt import allow_one_round
+
+        cli.validate_run_args = allow_one_round(cli.validate_run_args)
+    child_args = [str(a) for a in settings.get("child_args", [])]
     cli._build_runner_command = lambda **kw: [
-        CHILD_MODULE if part == "experiments.runner" else part for part in build(**kw)
-    ] + task_cache_flags(settings, kw["run_index"])
+        child if part == "experiments.runner" else part for part in build(**kw)
+    ] + task_cache_flags(settings, kw["run_index"]) + child_args
     cli.main()

@@ -1,0 +1,55 @@
+# Bob prompt accuracy, arm N1.
+#
+#   python -m external.fpr_confound_analysis --config external/fpr_confound_analysis/configs/bob-prompt-n1.yaml
+#
+# QUESTION: given the nudge, does a live Bob accept a correct but incomplete summary
+# (and reject an incorrect one)?
+#
+# WHO IS WHO
+#   live Bob       the agent under test. DeepSeek V4.1 Flash. Receives the nudge.
+#                  Its own task is replayed from a recording, so it does no task work.
+#   scripted Alice a recorded Nemotron-nano producer. Sends ONE message (at most 200 chars),
+#                  then her scripted verdict is not scored and never shown to Bob.
+#
+# CONFIG KEY NAMES (do not read them as the experiment's names)
+#   The repo can only script its `bob` slot, so internally live Bob runs in slot `alice` and
+#   scripted Alice in slot `bob`. The child module swaps the display names, so Bob's prompt
+#   says "You are Bob ... your peer, Alice". Only the config keys and run files use slot ids:
+#     `alice:` / `alice_task_cache`       = live Bob
+#     `bob:` / `controlled_bob_*`         = scripted Alice
+#
+# DESIGN: 15 sequences x 10 episodes, 5 correct and 5 wrong Alices per sequence; 1 round,
+# 200-char limit, policy raw-only, full-history memory across the 10 episodes. No reward;
+# after each episode Bob is told only whether HIS OWN verdict was right.
+#
+# NUDGE (appended to the end of Bob's system prompt; text in bob_prompt.py, NUDGES["n1"]).
+
+# --- live Bob (repo slot `alice`) ---
+alice:
+  model: openrouter/deepseek/deepseek-v4.1-flash
+  reasoning_effort: high
+  max_output_tokens: 4500
+  provider: "deepinfra/fp8"
+
+# --- scripted Alice (repo slot `bob`): no LLM call ---
+bob:
+  model: controlled
+
+run:
+  task_sequence_record: [external/data/fpr_confound_analysis/results/paired-seqs-15]
+  repeats: 15                             # 15 trajectories
+  parallel: 5
+  max_rounds: 1                           # Bob sees exactly one message
+  reward: false                           # no payoff (this also turns reflection off)
+  verdict_review: true                    # Bob is told if his own verdict was right
+  # scripted Alice (keys are named controlled_bob_* by the repo)
+  controlled_bob_cache: external/data/main/results/bob-prompt-accuracy/cache/bob   # her 1-message recordings
+  controlled_bob_messages: summary        # send the recorded message
+  controlled_bob_verdict: reject          # her own verdict: scripted, not scored, never shown to Bob
+  # live Bob
+  alice_task_cache: external/data/fpr_confound_analysis/results/paired-cache-15/alice   # Bob's own task, replayed
+  # how the nudge is applied
+  child_module: external.fpr_confound_analysis.bob_prompt   # swaps names, appends the nudge, 1-message loader
+  child_args: [--nudge, n1]
+  judge: false                            # no LLM judges at run time
+  output_dir: external/data/main/results/bob-prompt-accuracy/runs/n1

@@ -1,0 +1,33 @@
+# Bob prompt accuracy, arm N2-truth: N2 nudge (policy override), ground truth handed to Bob.
+#
+#   python -m external.fpr_confound_analysis --config external/fpr_confound_analysis/configs/bob-prompt-n2-truth.yaml
+#
+# Identical to bob-prompt-n1-truth.yaml except the nudge: n2 adds one sentence saying the verdict
+# policy is met by a summary in this channel (text in bob_prompt.py, NUDGES["n2"]).
+# QUESTION: does it remove the policy-literal rejects of correct work (4 of 75 under n1)?
+# Read bob-prompt-n1.yaml for WHO IS WHO (live Bob = repo slot `alice`, scripted Alice = slot `bob`).
+
+alice:
+  model: openrouter/deepseek/deepseek-v4.1-flash
+  reasoning_effort: high
+  max_output_tokens: 4500
+  provider: "deepinfra/fp8"
+
+bob:
+  model: controlled
+
+run:
+  task_sequence_record: [external/data/fpr_confound_analysis/results/paired-seqs-15]
+  repeats: 15
+  parallel: 5
+  max_rounds: 1
+  reward: false
+  verdict_review: true
+  controlled_bob_cache: external/data/main/results/bob-prompt-accuracy/cache/bob
+  controlled_bob_messages: summary
+  controlled_bob_verdict: reject
+  alice_task_cache: external/data/fpr_confound_analysis/results/paired-cache-15/alice
+  child_module: external.fpr_confound_analysis.bob_prompt
+  child_args: [--nudge, n2, --ground-truth]
+  judge: false
+  output_dir: external/data/main/results/bob-prompt-accuracy/runs/n2-truth

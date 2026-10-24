@@ -1,0 +1,43 @@
+# Bob prompt accuracy, arm N1-truth: N1 nudge, plus the ground truth handed to Bob.
+#
+#   python -m external.fpr_confound_analysis --config external/fpr_confound_analysis/configs/bob-prompt-n1-truth.yaml
+#
+# QUESTION: when Bob is TOLD whether Alice's answer is correct, does he follow the nudge
+# (accept correct, reject incorrect)? This separates prompt-following from guessing.
+#
+# Same as bob-prompt-n1.yaml (read its header for WHO IS WHO and the key-name note), with one
+# change: the child module gets --ground-truth. At the start of the communication phase Bob
+# sees one runner line, graded at run time by the author's evaluator on Alice's saved answer:
+#   [from=runner][type=other]
+#   Check result: Alice's answer to her task was graded against the reference answer. Result: CORRECT.   (or INCORRECT)
+# The verdict review stays ON: after each episode Bob is told whether his own verdict was right.
+
+# --- live Bob (repo slot `alice`) ---
+alice:
+  model: openrouter/deepseek/deepseek-v4.1-flash
+  reasoning_effort: high
+  max_output_tokens: 4500
+  provider: "deepinfra/fp8"
+
+# --- scripted Alice (repo slot `bob`): no LLM call ---
+bob:
+  model: controlled
+
+run:
+  task_sequence_record: [external/data/fpr_confound_analysis/results/paired-seqs-15]
+  repeats: 15
+  parallel: 5
+  max_rounds: 1
+  reward: false
+  verdict_review: true
+  # scripted Alice (keys are named controlled_bob_* by the repo)
+  controlled_bob_cache: external/data/main/results/bob-prompt-accuracy/cache/bob
+  controlled_bob_messages: summary
+  controlled_bob_verdict: reject
+  # live Bob
+  alice_task_cache: external/data/fpr_confound_analysis/results/paired-cache-15/alice
+  # nudge n1 + the runner line above
+  child_module: external.fpr_confound_analysis.bob_prompt
+  child_args: [--nudge, n1, --ground-truth]
+  judge: false
+  output_dir: external/data/main/results/bob-prompt-accuracy/runs/n1-truth
