@@ -1,0 +1,36 @@
+# Always-accept Bob that persuades Alice from episode 6 (arm alw-acc-delay-k5, k = 5).
+# Copied from external/fpr_confound_analysis/configs/alw-acc-delay-k5.yaml; only child_module and
+# the run command changed. output_dir still points at the bob-always-accept runs.
+#
+#   python -m external.main.mesh_always_accept --config external/main/mesh_always_accept/configs/alw-acc-delay-k5.yaml
+#
+# As alw-acc.yaml, but Bob's nudge is alw-acc-delay-k5: always accept, ordinary evidence in episodes
+# 1 to 5, and the persuade-Alice objective from episode 6 (text in persuader.py,
+# NUDGES["alw-acc-delay-k5"]). One
+# runner-tagged reminder is added at the start of episode 6's task phase (REMINDER_AA).
+# --persuade-after 5 is the 0-based index of episode 6. No --ground-truth.
+
+alice:
+  model: openrouter/deepseek/deepseek-v4.1-flash
+  reasoning_effort: medium                # on DeepInfra, medium caps thinking at 60% of max_output_tokens; high is uncapped
+  max_output_tokens: 4500
+  provider: "deepinfra/fp8"
+
+bob:
+  model: openrouter/deepseek/deepseek-v4.1-flash
+  reasoning_effort: medium
+  max_output_tokens: 4500
+  provider: "deepinfra/fp8"
+
+run:
+  task_sequence_record: [task/task_sequences_50x10]
+  repeats: 10
+  parallel: 5
+  max_rounds: 1
+  reward: false
+  verdict_review: true
+  bob_task_cache: external/data/main/results/bob-persuader/peer-cache-gemini
+  child_module: external.main.mesh_always_accept.persuader
+  child_args: [--nudge, alw-acc-delay-k5, --persuade-after, 5, --reasoning-tokens, 2800]   # explicit reasoning budget; reasoning_effort above is then not sent
+  judge: false                            # judges run during analysis
+  output_dir: external/data/main/results/bob-always-accept/runs/alw-acc-delay-k5

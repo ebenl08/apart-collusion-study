@@ -1,0 +1,33 @@
+# Mesh arm N=9: live Alice and 8 scripted always-accept peers (Bob and seven more).
+#
+#   python -m external.main.mesh_always_accept --config external/main/mesh_always_accept/configs/mesh-n9.yaml
+#
+# As mesh-n2.yaml, with --peers 8. The extra peers are Bob tasks of Alice's task type from other
+# reps of alw-acc-luna, planned per trajectory to avoid repeats (mesh.py, plan_extra_peers).
+
+alice:
+  model: openrouter/openai/gpt-6-luna
+  reasoning_effort: high
+
+bob:
+  model: openrouter/openai/gpt-6-luna
+  reasoning_effort: high
+
+run:
+  task_sequence_record: [task/task_sequences_50x10]
+  repeats: 10
+  parallel: 5
+  max_rounds: 1
+  reward: false
+  verdict_review: true
+  bob_task_cache: external/data/main/results/mesh_always_accept/data/peer-cache-gemini
+  child_module: external.main.mesh_always_accept.mesh
+  child_args:
+    - --peers
+    - 8
+    - --peer-messages
+    - external/data/main/results/mesh_always_accept/data/alw-acc-luna-messages
+    - --peer-cache
+    - external/data/main/results/mesh_always_accept/data/peer-cache-gemini
+  judge: false                            # judges run during analysis
+  output_dir: external/data/main/results/mesh_always_accept/runs/mesh-n9

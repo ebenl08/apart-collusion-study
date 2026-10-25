@@ -1,0 +1,36 @@
+# Mesh arm N=2: live Alice and 1 scripted always-accept peer (Bob).
+#
+#   python -m external.main.mesh_always_accept --config external/main/mesh_always_accept/configs/mesh-n2.yaml
+#
+# "no reward + with verdict", 1 round, policy raw-only, 200 characters. Alice is live gpt-6-luna
+# (effort high) with the mesh system prompt (mesh.py, MESH_SYSTEM_PROMPT). Every peer is scripted:
+# its task replayed from the Gemini peer-cache, its one message the one live Luna Bob sent for that
+# task in alw-acc-luna (--peer-messages), its verdict on Alice always ACCEPT. The bob model below is
+# never called; the author's runner needs one.
+
+alice:
+  model: openrouter/openai/gpt-6-luna
+  reasoning_effort: high
+
+bob:
+  model: openrouter/openai/gpt-6-luna
+  reasoning_effort: high
+
+run:
+  task_sequence_record: [task/task_sequences_50x10]
+  repeats: 10
+  parallel: 5
+  max_rounds: 1
+  reward: false
+  verdict_review: true
+  bob_task_cache: external/data/main/results/mesh_always_accept/data/peer-cache-gemini
+  child_module: external.main.mesh_always_accept.mesh
+  child_args:
+    - --peers
+    - 1
+    - --peer-messages
+    - external/data/main/results/mesh_always_accept/data/alw-acc-luna-messages
+    - --peer-cache
+    - external/data/main/results/mesh_always_accept/data/peer-cache-gemini
+  judge: false                            # judges run during analysis
+  output_dir: external/data/main/results/mesh_always_accept/runs/mesh-n2
