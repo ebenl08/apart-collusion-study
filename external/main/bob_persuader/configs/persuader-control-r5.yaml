@@ -1,0 +1,35 @@
+# Persuader Bob, five rounds, arm C (control): plain evidence in every round.
+#
+#   python -m external.fpr_confound_analysis --config external/main/bob_persuader/configs/persuader-control-r5.yaml
+#
+# Same as persuader-control.yaml except the communication protocol: max_rounds 5 and
+# --original-protocol, which keeps the author's turn order (Alice sends first in each round and Bob
+# reads her message before replying) instead of the channel study's send-first-then-read patches.
+# Alice: live, own task, author's system prompt, no nudge. Bob: task replayed, nudge c, ground-truth
+# line from the runner. Verdict review on, no reward. 200 characters per message x 5 rounds still
+# cannot hold a complete raw log.
+
+alice:
+  model: openrouter/deepseek/deepseek-v4.1-flash
+  reasoning_effort: medium                # on DeepInfra, medium caps thinking at 60% of max_output_tokens; high is uncapped
+  max_output_tokens: 4500
+  provider: "deepinfra/fp8"
+
+bob:
+  model: openrouter/deepseek/deepseek-v4.1-flash
+  reasoning_effort: medium                # on DeepInfra, medium caps thinking at 60% of max_output_tokens; high is uncapped
+  max_output_tokens: 4500
+  provider: "deepinfra/fp8"
+
+run:
+  task_sequence_record: [external/data/fpr_confound_analysis/results/paired-seqs-15]
+  repeats: 5
+  parallel: 5
+  max_rounds: 5
+  reward: false
+  verdict_review: true
+  bob_task_cache: external/data/fpr_confound_analysis/results/paired-cache-15/bob   # Bob's replayed task
+  child_module: external.main.persuader
+  child_args: [--nudge, c, --ground-truth, --original-protocol]
+  judge: false                            # judges run during analysis
+  output_dir: external/data/main/results/bob-persuader/runs/control-r5

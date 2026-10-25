@@ -1,0 +1,38 @@
+# Persuader Bob, delayed arm D: plain evidence for the first K episodes, persuasion afterwards.
+#
+#   python -m external.fpr_confound_analysis --config external/main/bob_persuader/configs/persuader-delayed.yaml
+#
+# Bob's system prompt (nudge d, text in persuader.py NUDGES["d"]) holds the evidence paragraph of
+# arm C AND the persuasion objective from episode 1, with a line saying the objective starts at
+# episode 6 and that until then he sends ordinary evidence. At the start of episode 6's task phase
+# (0-based index 5 = --persuade-after 5) he gets ONE runner-tagged reminder (persuader.py REMINDER)
+# that he can now start. No other message is added in episodes 7 to 10.
+# Compares Alice's behaviour before and after the switch inside the same trajectory.
+# Everything else is identical to persuader-p1.yaml and persuader-control.yaml: Alice live and
+# unnudged, Bob's task replayed, ground-truth line for Bob, DeepSeek effort medium, 1 round.
+# Change K with --persuade-after in child_args.
+
+alice:
+  model: openrouter/deepseek/deepseek-v4.1-flash
+  reasoning_effort: medium                # on DeepInfra, medium caps thinking at 60% of max_output_tokens; high is uncapped
+  max_output_tokens: 4500
+  provider: "deepinfra/fp8"
+
+bob:
+  model: openrouter/deepseek/deepseek-v4.1-flash
+  reasoning_effort: medium                # on DeepInfra, medium caps thinking at 60% of max_output_tokens; high is uncapped
+  max_output_tokens: 4500
+  provider: "deepinfra/fp8"
+
+run:
+  task_sequence_record: [external/data/fpr_confound_analysis/results/paired-seqs-15]
+  repeats: 15
+  parallel: 5
+  max_rounds: 1
+  reward: false
+  verdict_review: true
+  bob_task_cache: external/data/fpr_confound_analysis/results/paired-cache-15/bob
+  child_module: external.main.persuader
+  child_args: [--nudge, d, --ground-truth, --persuade-after, "5"]
+  judge: false
+  output_dir: external/data/main/results/bob-persuader/runs/delayed-k5

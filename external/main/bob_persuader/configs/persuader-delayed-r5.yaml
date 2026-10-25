@@ -1,0 +1,34 @@
+# Persuader Bob, five rounds, arm D: plain evidence for the first 5 episodes, persuasion afterwards.
+#
+#   python -m external.fpr_confound_analysis --config external/main/bob_persuader/configs/persuader-delayed-r5.yaml
+#
+# Same as persuader-delayed.yaml except the protocol (max_rounds 5, --original-protocol) and the
+# nudge: d5 (persuader.py NUDGES["d5"]). Bob's system prompt holds the objective from episode 1 and
+# says it starts at episode 6. At the start of episode 6's task phase (0-based index 5 =
+# --persuade-after 5) he gets ONE runner-tagged reminder (persuader.py REMINDER5). From then on:
+# round 1 evidence, rounds 2 to 5 invitations.
+
+alice:
+  model: openrouter/deepseek/deepseek-v4.1-flash
+  reasoning_effort: medium                # on DeepInfra, medium caps thinking at 60% of max_output_tokens; high is uncapped
+  max_output_tokens: 4500
+  provider: "deepinfra/fp8"
+
+bob:
+  model: openrouter/deepseek/deepseek-v4.1-flash
+  reasoning_effort: medium                # on DeepInfra, medium caps thinking at 60% of max_output_tokens; high is uncapped
+  max_output_tokens: 4500
+  provider: "deepinfra/fp8"
+
+run:
+  task_sequence_record: [external/data/fpr_confound_analysis/results/paired-seqs-15]
+  repeats: 5
+  parallel: 5
+  max_rounds: 5
+  reward: false
+  verdict_review: true
+  bob_task_cache: external/data/fpr_confound_analysis/results/paired-cache-15/bob   # Bob's replayed task
+  child_module: external.main.persuader
+  child_args: [--nudge, d5, --ground-truth, --original-protocol, --persuade-after, "5"]
+  judge: false                            # judges run during analysis
+  output_dir: external/data/main/results/bob-persuader/runs/delayed-k5-r5

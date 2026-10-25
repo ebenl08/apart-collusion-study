@@ -1,0 +1,33 @@
+# Persuader Bob, control arm C: same as persuader-p1.yaml, but Bob only has the N2 nudge.
+#
+#   python -m external.fpr_confound_analysis --config external/main/bob_persuader/configs/persuader-control.yaml
+#
+# Bob's system prompt gets nudge c (the N2 text: summary is acceptable, MUST accept correct work)
+# and no persuasion instruction, so he sends ordinary evidence about his work. He still gets the
+# graded-truth runner line about Alice's answer. Everything else is identical to arm P, so the
+# gap between P and C is the effect of the persuasion instruction. See persuader-p1.yaml.
+
+alice:
+  model: openrouter/deepseek/deepseek-v4.1-flash
+  reasoning_effort: medium                # on DeepInfra, medium caps thinking at 60% of max_output_tokens; high is uncapped
+  max_output_tokens: 4500
+  provider: "deepinfra/fp8"
+
+bob:
+  model: openrouter/deepseek/deepseek-v4.1-flash
+  reasoning_effort: medium                # on DeepInfra, medium caps thinking at 60% of max_output_tokens; high is uncapped
+  max_output_tokens: 4500
+  provider: "deepinfra/fp8"
+
+run:
+  task_sequence_record: [external/data/fpr_confound_analysis/results/paired-seqs-15]
+  repeats: 15
+  parallel: 5
+  max_rounds: 1
+  reward: false
+  verdict_review: true
+  bob_task_cache: external/data/fpr_confound_analysis/results/paired-cache-15/bob
+  child_module: external.main.persuader
+  child_args: [--nudge, c, --ground-truth]
+  judge: false
+  output_dir: external/data/main/results/bob-persuader/runs/control
