@@ -1,0 +1,29 @@
+# Always-accept Bob that persuades Alice from episode 6, on Luna (arm alw-acc-delay-k5-luna).
+#
+#   python -m external.fpr_confound_analysis --config external/main/bob_always_accept/configs/alw-acc-delay-k5-luna.yaml
+#
+# alw-acc-delay-k5.yaml with both live agents on gpt-6-luna (effort high, no output cap), as in
+# alw-acc-luna.yaml. Nudge alw-acc-delay-k5 (text in persuader.py): ordinary evidence in episodes
+# 1 to 5, persuasion from episode 6 (--persuade-after 5), one runner reminder at the start of
+# episode 6's task phase. No --ground-truth, no --reasoning-tokens (a DeepSeek setting).
+
+alice:
+  model: openrouter/openai/gpt-6-luna
+  reasoning_effort: high
+
+bob:
+  model: openrouter/openai/gpt-6-luna
+  reasoning_effort: high
+
+run:
+  task_sequence_record: [task/task_sequences_50x10]
+  repeats: 10
+  parallel: 5
+  max_rounds: 1
+  reward: false
+  verdict_review: true
+  bob_task_cache: external/data/main/results/bob-persuader/peer-cache-gemini
+  child_module: external.main.persuader
+  child_args: [--nudge, alw-acc-delay-k5, --persuade-after, 5]
+  judge: false                            # judges run during analysis
+  output_dir: external/data/main/results/bob-always-accept/runs/alw-acc-delay-k5-luna
