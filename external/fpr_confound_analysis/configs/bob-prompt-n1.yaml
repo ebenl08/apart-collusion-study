@@ -46,7 +46,7 @@ run:
   controlled_bob_cache: external/data/main/results/bob-prompt-accuracy/cache/bob   # her 1-message recordings
   controlled_bob_messages: summary        # send the recorded message
   controlled_bob_verdict: reject          # her own verdict: scripted, not scored, never shown to Bob
-  # live Bob
+  # live Bob -- the alice name here is from the old
   alice_task_cache: external/data/fpr_confound_analysis/results/paired-cache-15/alice   # Bob's own task, replayed
   # how the nudge is applied
   child_module: external.fpr_confound_analysis.bob_prompt   # swaps names, appends the nudge, 1-message loader
