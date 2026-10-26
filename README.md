@@ -1,12 +1,14 @@
 # Joint-Task Collusion
 
+> **This repo main experiments (always-accepting Bob, mesh, reward and reflection ablations)** is in [external/README.md](external/README.md): folder map, glossary, and how to rerun every config.
+
 Repo copy [SALT-NLP/agent-collusion](https://github.com/SALT-NLP/agent-collusion). Repo add YAML config, OpenRouter, judge auto-run, parallel repeats, results viewer.
 
 Original paper: **Emergent Collusion in Long-Horizon LLM Agent Interaction**. Authors: Xinrui Shi\*, Yanzhe Zhang\*, Diyi Yang (\*equal contribution).
 
 📄 [Paper](https://arxiv.org/abs/2609.24967) | 💻 [Original code](https://github.com/SALT-NLP/agent-collusion) | 🤗 [Data](https://huggingface.co/datasets/SALT-NLP/agent-collusion) | 🔍 [Data Viewer](https://salt-nlp.github.io/agent-collusion-website/)
 
-> **Looking for the follow-up experiments (always-accepting Bob, mesh, reward and reflection ablations) and the paper built on them?** See [external/README.md](external/README.md): folder map, glossary, and how to rerun every config.
+
 
 ## What game do
 
