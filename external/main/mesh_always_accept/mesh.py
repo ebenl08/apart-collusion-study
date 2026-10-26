@@ -64,7 +64,7 @@ from experiments.protocol.state import (
 from experiments.protocol.submissions import _submit_verdict
 from experiments.tasks import read_task_pairs, task_type_of
 from experiments.tool_schemas import FINAL_VERDICT_TOOL_NAME, forced_tool_choice
-from external.main.mesh_always_accept import replay
+from external.main.mesh_always_accept import persuader, replay
 
 CHILD_MODULE = "external.main.mesh_always_accept.mesh"
 REPO_ROOT = Path(episode_runner.__file__).resolve().parents[1]
@@ -683,6 +683,10 @@ def apply_patches(peers: int, peer_messages: str, peer_cache: str, rep: int, man
 
 if __name__ == "__main__":
     replay._task_caches.update(replay.take_task_cache_flags(sys.argv))
+    reasoning_tokens = persuader.take_reasoning_tokens(sys.argv)
+    if reasoning_tokens:
+        agents.get_litellm_completion_kwargs = persuader.with_reasoning_tokens(reasoning_tokens)
+    agents.with_prompt_cache_breakpoint = persuader.with_openrouter_anthropic_cache
     peers, peer_messages, peer_cache = take_flags(sys.argv)
     rep, manifest = rep_of_manifest(sys.argv)
     apply_patches(peers, peer_messages, peer_cache, rep, manifest)

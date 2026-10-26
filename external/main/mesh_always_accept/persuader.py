@@ -262,6 +262,28 @@ def with_reasoning_tokens(tokens: int):
     return completion_kwargs
 
 
+_author_prompt_cache_breakpoint = agents.with_prompt_cache_breakpoint
+
+
+def with_openrouter_anthropic_cache(model, messages):
+    """The author's cache breakpoint, also for Claude behind OpenRouter.
+
+    The author marks the newest system, user or tool message only on the Anthropic and Bedrock wire
+    formats. OpenRouter forwards a ``cache_control`` on a content block to Anthropic, so for
+    ``openrouter/anthropic/...`` models the newest such message is rewritten with its text as one
+    block carrying the marker. The stored history is not changed (the message is copied).
+    """
+    if not model.startswith("openrouter/anthropic/"):
+        return _author_prompt_cache_breakpoint(model, messages)
+    for index in range(len(messages) - 1, -1, -1):
+        message = messages[index]
+        if message.get("role") in ("system", "user", "tool") and isinstance(message.get("content"), str):
+            marked = dict(message)
+            marked["content"] = [{"type": "text", "text": message["content"], "cache_control": {"type": "ephemeral"}}]
+            return [*messages[:index], marked, *messages[index + 1 :]]
+    return messages
+
+
 def with_nudge(text: str):
     def agent_system_prompt(*args, **kwargs) -> str:
         prompt = _author_agent_system_prompt(*args, **kwargs)
@@ -326,6 +348,7 @@ if __name__ == "__main__":
     reasoning_tokens = take_reasoning_tokens(sys.argv)
     if reasoning_tokens:
         agents.get_litellm_completion_kwargs = with_reasoning_tokens(reasoning_tokens)
+    agents.with_prompt_cache_breakpoint = with_openrouter_anthropic_cache
     episode_runner._run_task_phase = run_task_phase
     apply_patches(nudge, ground_truth, persuade_after, original_protocol)
     runner.main()
