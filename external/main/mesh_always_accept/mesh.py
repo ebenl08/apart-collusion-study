@@ -687,6 +687,8 @@ if __name__ == "__main__":
     if reasoning_tokens:
         agents.get_litellm_completion_kwargs = persuader.with_reasoning_tokens(reasoning_tokens)
     agents.with_prompt_cache_breakpoint = persuader.with_openrouter_anthropic_cache
+    if persuader.take_reflection_flag(sys.argv):
+        persuader.allow_reflection_without_reward()
     peers, peer_messages, peer_cache = take_flags(sys.argv)
     rep, manifest = rep_of_manifest(sys.argv)
     apply_patches(peers, peer_messages, peer_cache, rep, manifest)

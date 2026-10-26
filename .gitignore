@@ -21,7 +21,8 @@ paper/
 
 analysis/results/
 _papers/
-external/data/
+external/data/*
+!external/data/.gitignore
 external/reasoning_trace/*/
 .docs/
 external/hf/data/

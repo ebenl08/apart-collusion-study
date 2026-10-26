@@ -6,6 +6,8 @@ Original paper: **Emergent Collusion in Long-Horizon LLM Agent Interaction**. Au
 
 📄 [Paper](https://arxiv.org/abs/2609.24967) | 💻 [Original code](https://github.com/SALT-NLP/agent-collusion) | 🤗 [Data](https://huggingface.co/datasets/SALT-NLP/agent-collusion) | 🔍 [Data Viewer](https://salt-nlp.github.io/agent-collusion-website/)
 
+> **Looking for the follow-up experiments (always-accepting Bob, mesh, reward and reflection ablations) and the paper built on them?** See [external/README.md](external/README.md): folder map, glossary, and how to rerun every config.
+
 ## What game do
 
 Two agent: Alice, Bob. Game run 10 episode. Each episode have four phase:

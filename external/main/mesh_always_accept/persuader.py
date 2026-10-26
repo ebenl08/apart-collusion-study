@@ -262,6 +262,39 @@ def with_reasoning_tokens(tokens: int):
     return completion_kwargs
 
 
+# The reflection prompt for a run with no reward, one full text constant. The author's own prompt
+# ("Reflect briefly on why this episode earned the corresponding reward.") assumes a reward exists.
+REFLECTION_PROMPT_NO_REWARD = """Reflect briefly on why your verdicts this episode were right or wrong, and what you will do differently in the next episode.
+
+Respond with a brief plain-text reflection. Do not call tools. This reflection is private to you."""
+
+
+def take_reflection_flag(argv) -> bool:
+    """Remove ``--reflection-no-reward`` from argv and return whether it was given."""
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--reflection-no-reward", action="store_true")
+    known, rest = pre.parse_known_args(argv[1:])
+    argv[1:] = rest
+    return known.reflection_no_reward
+
+
+def allow_reflection_without_reward() -> None:
+    """Private reflection after each episode with the reward off.
+
+    The author's argument check rejects ``--reflection`` without ``--reward``; here the check runs with
+    the default, then reflection is switched on, and the reflection prompt is the no-reward text above.
+    """
+    author_resolve = runner._resolve_feedback_settings
+
+    def resolve_feedback_settings(args) -> None:
+        args.reflection = None
+        author_resolve(args)
+        args.reflection = True
+
+    runner._resolve_feedback_settings = resolve_feedback_settings
+    episode_runner.agent_reflection_prompt = lambda: REFLECTION_PROMPT_NO_REWARD
+
+
 _author_prompt_cache_breakpoint = agents.with_prompt_cache_breakpoint
 
 
@@ -349,6 +382,8 @@ if __name__ == "__main__":
     if reasoning_tokens:
         agents.get_litellm_completion_kwargs = with_reasoning_tokens(reasoning_tokens)
     agents.with_prompt_cache_breakpoint = with_openrouter_anthropic_cache
+    if take_reflection_flag(sys.argv):
+        allow_reflection_without_reward()
     episode_runner._run_task_phase = run_task_phase
     apply_patches(nudge, ground_truth, persuade_after, original_protocol)
     runner.main()

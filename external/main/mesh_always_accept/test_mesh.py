@@ -75,7 +75,8 @@ def fake_completion(*, model, messages, completion_kwargs, **_):
 TOOLS_SEEN: list = []
 
 
-def check_run(reward: bool = False) -> None:
+def check_run(reward: bool = False, reflect: bool = False) -> None:
+    """reflect: reward off, reflection on (--reflection-no-reward). Patches module globals for good, so run it last."""
     out = Path(tempfile.mkdtemp()) / "rep1"
     TOOLS_SEEN.clear()
     sys.argv = [
@@ -88,6 +89,10 @@ def check_run(reward: bool = False) -> None:
         "--bob-task-cache", str(PEER_CACHE / "rep001"),
         "--peers", str(PEERS), "--peer-messages", str(PEER_MESSAGES), "--peer-cache", str(PEER_CACHE),
     ]
+    if reflect:
+        sys.argv.append("--reflection-no-reward")
+        if mesh.persuader.take_reflection_flag(sys.argv):
+            mesh.persuader.allow_reflection_without_reward()
     replay._task_caches.update(replay.take_task_cache_flags(sys.argv))
     peers, peer_messages, peer_cache = mesh.take_flags(sys.argv)
     rep, manifest = mesh.rep_of_manifest(sys.argv)
@@ -125,6 +130,12 @@ def check_run(reward: bool = False) -> None:
             assert not episode["agents"]["bob"]["reflection"]
         else:
             assert "## Reward" not in feedback
+            if reflect:
+                assert episode["agents"]["alice"]["reflection"] == "scripted reflection"
+                assert episode["agents"]["alice"]["reflection_prompt"] == mesh.persuader.REFLECTION_PROMPT_NO_REWARD
+                assert not episode["agents"]["bob"]["reflection"]
+            else:
+                assert not episode["agents"]["alice"]["reflection"]
     texts = {t["function"]["name"]: t["function"]["description"] for t in TOOLS_SEEN[0]}
     assert texts["send_message"] == mesh.SEND_MESSAGE_DESCRIPTION
     assert texts["submit_verdict"] == mesh.SUBMIT_VERDICT_DESCRIPTION
@@ -137,3 +148,4 @@ if __name__ == "__main__":
     check_picks()
     check_run()
     check_run(reward=True)
+    check_run(reflect=True)
