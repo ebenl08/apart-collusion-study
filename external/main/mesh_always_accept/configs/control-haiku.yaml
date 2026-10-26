@@ -1,0 +1,25 @@
+# Control on Claude Haiku 5.5: no communication (one blind round), live Alice and live Bob, no nudge, no replay.
+#
+#   python -m external.main.mesh_always_accept --config external/main/mesh_always_accept/configs/control-haiku.yaml
+#
+# As control-deepseek.yaml with both agents on claude-haiku-5-5 (OpenRouter), effort medium (its default),
+# no output cap, no provider pin, no --reasoning-tokens. 25 trajectories, reps 1-25.
+
+alice:
+  model: openrouter/anthropic/claude-haiku-5-5
+  reasoning_effort: medium
+
+bob:
+  model: openrouter/anthropic/claude-haiku-5-5
+  reasoning_effort: medium
+
+run:
+  task_sequence_record: [task/task_sequences_50x10]
+  repeats: 25
+  parallel: 10
+  max_rounds: 1
+  reward: false
+  verdict_review: true
+  child_module: external.main.mesh_always_accept.persuader
+  judge: false                            # judges run during analysis
+  output_dir: external/data/main/results/mesh_always_accept/runs/control-haiku

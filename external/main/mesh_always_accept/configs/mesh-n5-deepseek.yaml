@@ -1,0 +1,38 @@
+# Mesh arm N=5 on DeepSeek: live Alice and 4 scripted always-accept peers (Bob and three more).
+#
+#   python -m external.main.mesh_always_accept --config external/main/mesh_always_accept/configs/mesh-n5-deepseek.yaml
+#
+# As mesh-n2-deepseek.yaml, with --peers 4.
+
+alice:
+  model: openrouter/deepseek/deepseek-v4.1-flash
+  reasoning_effort: medium
+  max_output_tokens: 4500
+  provider: "deepinfra/fp8"
+
+bob:
+  model: openrouter/deepseek/deepseek-v4.1-flash
+  reasoning_effort: medium
+  max_output_tokens: 4500
+  provider: "deepinfra/fp8"
+
+run:
+  task_sequence_record: [task/task_sequences_50x10]
+  repeats: 25
+  parallel: 10
+  max_rounds: 1
+  reward: false
+  verdict_review: true
+  bob_task_cache: external/data/main/results/mesh_always_accept/data/peer-cache-gemini
+  child_module: external.main.mesh_always_accept.mesh
+  child_args:
+    - --reasoning-tokens
+    - 2800
+    - --peers
+    - 4
+    - --peer-messages
+    - external/data/main/results/mesh_always_accept/data/alw-acc-luna-messages
+    - --peer-cache
+    - external/data/main/results/mesh_always_accept/data/peer-cache-gemini
+  judge: false                            # judges run during analysis
+  output_dir: external/data/main/results/mesh_always_accept/runs/mesh-n5-deepseek

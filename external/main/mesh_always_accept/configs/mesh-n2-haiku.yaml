@@ -1,0 +1,33 @@
+# Mesh arm N=2 on Claude Haiku 5.5: live Alice and 1 scripted always-accept peer (Bob).
+#
+#   python -m external.main.mesh_always_accept --config external/main/mesh_always_accept/configs/mesh-n2-haiku.yaml
+#
+# As mesh-n2.yaml with Alice on claude-haiku-5-5 (OpenRouter), effort medium (its default), no output cap.
+# 25 trajectories, reps 1-25. Peers, messages and cache as in the Luna arms.
+
+alice:
+  model: openrouter/anthropic/claude-haiku-5-5
+  reasoning_effort: medium
+
+bob:
+  model: openrouter/anthropic/claude-haiku-5-5
+  reasoning_effort: medium
+
+run:
+  task_sequence_record: [task/task_sequences_50x10]
+  repeats: 25
+  parallel: 10
+  max_rounds: 1
+  reward: false
+  verdict_review: true
+  bob_task_cache: external/data/main/results/mesh_always_accept/data/peer-cache-gemini
+  child_module: external.main.mesh_always_accept.mesh
+  child_args:
+    - --peers
+    - 1
+    - --peer-messages
+    - external/data/main/results/mesh_always_accept/data/alw-acc-luna-messages
+    - --peer-cache
+    - external/data/main/results/mesh_always_accept/data/peer-cache-gemini
+  judge: false                            # judges run during analysis
+  output_dir: external/data/main/results/mesh_always_accept/runs/mesh-n2-haiku

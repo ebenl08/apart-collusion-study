@@ -1,0 +1,33 @@
+# Control on DeepSeek: no communication (one blind round), live Alice and live Bob, no nudge, no replay.
+#
+#   python -m external.main.mesh_always_accept --config external/main/mesh_always_accept/configs/control-deepseek.yaml
+#
+# "no reward + with verdict", 1 round, policy raw-only, 200 characters. Model settings as in alw-acc.yaml:
+# DeepInfra fp8, output cap 4,500, effort medium in the YAML, --reasoning-tokens 2800. The persuader child
+# without --nudge and without bob_task_cache is the channel study's one-round condition (send first, then
+# read), with both agents live. Matches external/channel_study one-round-noreward-review-luna-5 for Luna.
+# 25 trajectories, reps 1-25.
+
+alice:
+  model: openrouter/deepseek/deepseek-v4.1-flash
+  reasoning_effort: medium
+  max_output_tokens: 4500
+  provider: "deepinfra/fp8"
+
+bob:
+  model: openrouter/deepseek/deepseek-v4.1-flash
+  reasoning_effort: medium
+  max_output_tokens: 4500
+  provider: "deepinfra/fp8"
+
+run:
+  task_sequence_record: [task/task_sequences_50x10]
+  repeats: 25
+  parallel: 10
+  max_rounds: 1
+  reward: false
+  verdict_review: true
+  child_module: external.main.mesh_always_accept.persuader
+  child_args: [--reasoning-tokens, 2800]
+  judge: false                            # judges run during analysis
+  output_dir: external/data/main/results/mesh_always_accept/runs/control-deepseek
